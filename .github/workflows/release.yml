@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: onedrive-rsync
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        continue-on-error: true  # cache push is best-effort
+
+      - name: Build
+        run: nix build .#default
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp result/bin/onedrive-rsync  dist/onedrive-rsync-x86_64-linux
+          cp result/bin/onedrive-rsyncd dist/onedrive-rsyncd-x86_64-linux
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

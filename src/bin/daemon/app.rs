@@ -1,0 +1,238 @@
+// Top-level daemon: initialises all subsystems and drives the main event loop
+
+use crate::{config_watcher::{ConfigEvent, ConfigWatcher}, mount_manager::MountManager, sync_scheduler::SyncScheduler, status_writer};
+use anyhow::Result;
+use chrono::Utc;
+use onedrive_mount::{
+    config::{Config, RemoteConfig},
+    status::{DaemonStatus, MountState, RemoteStatus, SyncRuleStatus, SyncState},
+};
+use std::time::Duration;
+use tokio::sync::{mpsc, watch};
+use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
+
+
+pub async fn run(config: Config) -> Result<()> {
+    let (status_tx, status_rx) = watch::channel(build_initial_status(&config));
+
+    let (config_tx, mut config_rx) = mpsc::channel::<ConfigEvent>(4);
+    let _watcher = ConfigWatcher::new(config_tx)?;
+
+    let cancel = CancellationToken::new();
+    status_writer::start(status_rx, cancel.clone());
+
+    let mut mount_manager = MountManager::new(config.log.clone());
+    let mut scheduler = SyncScheduler::new();
+
+    // Bring all enabled remotes online at startup
+    for remote in config.remotes.iter().filter(|r| r.enabled) {
+        startup_remote(&mut mount_manager, &status_tx, remote).await;
+    }
+    scheduler.start(&config.remotes, status_tx.clone());
+
+    info!("daemon running");
+
+    // Health check interval — short enough to detect a crashed mount within a few seconds
+    let mut health_tick = tokio::time::interval(Duration::from_secs(10));
+    health_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut sync_now_sig = crate::signal::sync_now_listener();
+
+    let mut current_config = config;
+    loop {
+        tokio::select! {
+            _ = crate::signal::wait_for_shutdown() => {
+                info!("shutdown signal received");
+                break;
+            }
+            Some(event) = config_rx.recv() => {
+                match event {
+                    ConfigEvent::Loaded(new_config) => {
+                        // Clear any previously reported parse error
+                        status_tx.send_modify(|s| s.config_error = None);
+                        reload(&mut mount_manager, &mut scheduler, &status_tx, &current_config, &new_config).await;
+                        current_config = new_config;
+                    }
+                    ConfigEvent::ParseError(msg) => {
+                        warn!(error = %msg, "config parse error — keeping previous config");
+                        status_tx.send_modify(|s| s.config_error = Some(msg));
+                    }
+                }
+            }
+            _ = health_tick.tick() => {
+                check_mount_health(&mut mount_manager, &status_tx, &current_config).await;
+            }
+            _ = crate::signal::wait_for_sync_now(&mut sync_now_sig) => {
+                info!("SIGUSR1 received — triggering immediate sync for all rules");
+                for remote in current_config.remotes.iter().filter(|r| r.enabled) {
+                    for rule in remote.sync_rules.iter().filter(|r| r.enabled) {
+                        scheduler.trigger_sync_now(&remote.name, &rule.name);
+                    }
+                }
+            }
+        }
+    }
+
+    // Stop syncs before unmounting so in-flight copies finish cleanly
+    scheduler.stop().await;
+    mount_manager.stop_all().await;
+    cancel.cancel();
+
+    Ok(())
+}
+
+async fn startup_remote(
+    mounts: &mut MountManager,
+    status_tx: &watch::Sender<DaemonStatus>,
+    remote: &RemoteConfig,
+) {
+    let state = mounts.start(remote).await.unwrap_or_else(|e| MountState::Failed {
+        error: e.to_string(),
+        at: Utc::now(),
+    });
+
+    status_tx.send_modify(|s| {
+        if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
+            rs.mount = state;
+        }
+    });
+}
+
+async fn reload(
+    mounts: &mut MountManager,
+    scheduler: &mut SyncScheduler,
+    status_tx: &watch::Sender<DaemonStatus>,
+    old: &Config,
+    new: &Config,
+) {
+    info!("config reloaded — applying changes");
+
+    // Stop all syncs before touching mounts to avoid partial syncs
+    scheduler.stop().await;
+
+    // Remotes removed from config get unmounted
+    for old_remote in &old.remotes {
+        if !new.remotes.iter().any(|r| r.name == old_remote.name) {
+            info!(remote = %old_remote.name, "remote removed — unmounting");
+            mounts.stop(&old_remote.name).await;
+            status_tx.send_modify(|s| s.remotes.retain(|r| r.name != old_remote.name));
+        }
+    }
+
+    // New or changed remotes get restarted; disabled ones get stopped
+    for new_remote in &new.remotes {
+        if !new_remote.enabled {
+            let was_enabled = old.remotes.iter()
+                .find(|r| r.name == new_remote.name)
+                .map(|r| r.enabled)
+                .unwrap_or(false);
+            if was_enabled {
+                info!(remote = %new_remote.name, "remote disabled — unmounting");
+            }
+            mounts.stop(&new_remote.name).await;
+            status_tx.send_modify(|s| {
+                if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == new_remote.name) {
+                    rs.mount = MountState::Unmounted;
+                }
+            });
+            continue;
+        }
+
+        let is_new = !old.remotes.iter().any(|r| r.name == new_remote.name);
+        let changed = old.remotes.iter().find(|r| r.name == new_remote.name)
+            .map(|old_remote| remote_config_changed(old_remote, new_remote))
+            .unwrap_or(false);
+
+        if is_new {
+            info!(remote = %new_remote.name, "remote added — mounting");
+            startup_remote(mounts, status_tx, new_remote).await;
+        } else if changed {
+            info!(remote = %new_remote.name, "remote config changed — remounting");
+            mounts.stop(&new_remote.name).await;
+            startup_remote(mounts, status_tx, new_remote).await;
+        }
+
+        // Log sync rule changes within this remote
+        if let Some(old_remote) = old.remotes.iter().find(|r| r.name == new_remote.name) {
+            for old_rule in &old_remote.sync_rules {
+                if !new_remote.sync_rules.iter().any(|r| r.name == old_rule.name) {
+                    info!(remote = %new_remote.name, rule = %old_rule.name, "sync rule removed");
+                }
+            }
+            for new_rule in &new_remote.sync_rules {
+                let old_rule = old_remote.sync_rules.iter().find(|r| r.name == new_rule.name);
+                match old_rule {
+                    None => info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule added"),
+                    Some(old) if !old.enabled && new_rule.enabled =>
+                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule enabled"),
+                    Some(old) if old.enabled && !new_rule.enabled =>
+                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule disabled"),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // Rebuild status entries for rules that may have changed
+    status_tx.send_modify(|s| {
+        for remote in &new.remotes {
+            if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
+                rs.sync_rules = remote.sync_rules.iter().map(|r| SyncRuleStatus {
+                    name: r.name.clone(),
+                    last_sync: rs.sync_rules.iter().find(|s| s.name == r.name).and_then(|s| s.last_sync),
+                    next_sync: None,
+                    state: SyncState::Idle,
+                }).collect();
+            }
+        }
+    });
+
+    scheduler.start(&new.remotes, status_tx.clone());
+}
+
+async fn check_mount_health(
+    mounts: &mut MountManager,
+    status_tx: &watch::Sender<DaemonStatus>,
+    config: &Config,
+) {
+    for remote in &config.remotes {
+        let state = mounts.health_check(remote).await;
+        status_tx.send_modify(|s| {
+            if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
+                // Only update if the state actually changed to avoid spurious status writes
+                if rs.mount != state {
+                    rs.mount = state;
+                }
+            }
+        });
+    }
+}
+
+fn remote_config_changed(old: &RemoteConfig, new: &RemoteConfig) -> bool {
+    // Mount options or the remote endpoint itself changed — sync rules alone don't need remount
+    old.name != new.name
+        || old.mount_point != new.mount_point
+        || old.r#type != new.r#type
+        || old.poll_interval != new.poll_interval
+        || old.mount.vfs_cache_mode != new.mount.vfs_cache_mode
+        || old.mount.vfs_cache_max_size != new.mount.vfs_cache_max_size
+}
+
+fn build_initial_status(config: &Config) -> DaemonStatus {
+    DaemonStatus {
+        pid: std::process::id(),
+        started_at: Some(Utc::now()),
+        config_error: None,
+        remotes: config.remotes.iter().map(|r| RemoteStatus {
+            name: r.name.clone(),
+            mount: MountState::Unmounted,
+            sync_rules: r.sync_rules.iter().filter(|rule| rule.enabled).map(|rule| SyncRuleStatus {
+                name: rule.name.clone(),
+                last_sync: None,
+                next_sync: None,
+                state: SyncState::Idle,
+            }).collect(),
+        }).collect(),
+    }
+}

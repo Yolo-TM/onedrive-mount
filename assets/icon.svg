@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Cloud body -->
+  <path d="M48 28.5a10 10 0 0 0-9.5-10A14 14 0 0 0 12 24a8 8 0 0 0 2 15.5h34a8 8 0 0 0 0-11z"
+        fill="#4a9eff" />
+  <!-- Down arrow (download from cloud) -->
+  <path d="M32 36 v12 m-5-6 l5 6 5-6"
+        stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Up arrow (sync back) -->
+  <circle cx="50" cy="50" r="10" fill="#2563eb"/>
+  <path d="M50 55 v-8 m-3 3 l3-3 3 3"
+        stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

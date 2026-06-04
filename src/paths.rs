@@ -1,0 +1,44 @@
+// XDG-compliant paths so all components agree on file locations
+
+use std::path::PathBuf;
+
+pub fn config_dir() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("~/.config"))
+        .join("onedrive-mount")
+}
+
+pub fn config_file() -> PathBuf {
+    config_dir().join("config.toml")
+}
+
+pub fn data_dir() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("~/.local/share"))
+        .join("onedrive-mount")
+}
+
+pub fn status_file() -> PathBuf {
+    data_dir().join("status.toml")
+}
+
+pub fn daemon_pid_file() -> PathBuf {
+    data_dir().join("daemon.pid")
+}
+
+pub fn gui_pid_file() -> PathBuf {
+    data_dir().join("gui.pid")
+}
+
+/// Expands a leading `~` to the user's home directory.
+pub fn expand_tilde(path: &str) -> PathBuf {
+    if let Some(rest) = path.strip_prefix("~/") {
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/"))
+            .join(rest)
+    } else if path == "~" {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+    } else {
+        PathBuf::from(path)
+    }
+}

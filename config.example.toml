@@ -1,0 +1,28 @@
+[[remotes]]
+name = "onedrive"            # must match rclone remote name
+mount_point = "~/onedrive"
+# type = "onedrive"
+# poll_interval = "30s"
+# enabled = true
+
+[remotes.mount]
+# vfs_cache_mode = "full"
+# vfs_cache_max_age = "72h"
+# vfs_cache_max_size = "20G"
+# vfs_write_back = "5s"
+# transfers = 8
+# dir_cache_time = "15m"
+# extra_flags = []
+
+[[remotes.sync_rules]]
+name = "Docs"
+remote_path = "Files/Docs"
+local_path = "~/Docs"
+patterns = ["*.pdf"]
+interval = "5m"
+conflict_strategy = "remote_wins"   # remote_wins | newest_wins | keep_both
+# enabled = false
+
+[log]
+# file = "~/.local/share/rclone/onedrive-mount.log"
+# level = "NOTICE"   # DEBUG | INFO | NOTICE | ERROR
