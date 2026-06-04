@@ -19,19 +19,22 @@ Communication is file-based: the GUI writes [`~/.config/onedrive-mount/config.to
 
 ## Install
 
-### NixOS — flake module
+### NixOS
 
-Add the flake as an input and import the module:
+Add to `environment.systemPackages` in your configuration:
 
 ```nix
-inputs.onedrive-mount.url = "github:Yolo-TM/onedrive-mount";
-
-# in your nixosConfiguration modules:
-onedrive-mount.nixosModules.default
-{ services.onedrive-mount.enable = true; }
+pkgs.rclone
+pkgs.fuse3
+(import (pkgs.fetchTarball {
+  url = "https://github.com/Yolo-TM/onedrive-mount/releases/download/v0.1.3/onedrive-mount-x86_64-linux-nix.tar.gz";
+  sha256 = lib.fakeHash;
+}) { inherit pkgs; })
 ```
 
-This adds both binaries to `environment.systemPackages`. The daemon runs as a per-user systemd service — start it from the GUI's **Service** tab or with `systemctl --user enable --now onedrive-mountd`.
+Run `nixos-rebuild switch` once to get the correct hash from the error output, replace `lib.fakeHash` with it, then rebuild again.
+
+This installs both binaries and the `.desktop` entry. The daemon runs as a per-user systemd service — start it from the GUI's **Service** tab or with `systemctl --user enable --now onedrive-mountd`.
 
 ### Pre-built binaries (GitHub releases)
 
