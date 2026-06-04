@@ -27,8 +27,12 @@ async fn main() -> Result<()> {
     check_rclone_or_exit();
 
     let config_path = config_file();
-    let config = Config::load(&config_path)
-        .with_context(|| format!("loading config from {}", config_path.display()))?;
+    let config = if config_path.exists() {
+        Config::load(&config_path)
+            .with_context(|| format!("loading config from {}", config_path.display()))?
+    } else {
+        Config::default()
+    };
 
     // Guard must be held for the process lifetime — stored in a local so Drop runs on exit
     let _logging_guard = init_logging(&config);

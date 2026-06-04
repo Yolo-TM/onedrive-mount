@@ -34,7 +34,7 @@ pub async fn run(config: Config) -> Result<()> {
     info!("daemon running");
 
     // Health check interval — short enough to detect a crashed mount within a few seconds
-    let mut health_tick = tokio::time::interval(Duration::from_secs(10));
+    let mut health_tick = tokio::time::interval(Duration::from_secs(3));
     health_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let mut sync_now_sig = crate::signal::sync_now_listener();

@@ -13,9 +13,10 @@ fn unit_path() -> PathBuf {
 fn unit_content(binary_path: &std::path::Path) -> String {
     format!(
         "[Unit]\n\
-         Description=OneDrive rclone Daemon\n\
+         Description=OneDrive Mount Daemon\n\
          After=network-online.target\n\
          Wants=network-online.target\n\
+         After=NetworkManager-wait-online.service\n\
          \n\
          [Service]\n\
          ExecStart={}\n\

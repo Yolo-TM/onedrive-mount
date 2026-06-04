@@ -31,6 +31,10 @@ impl ConfigWatcher {
         let pending: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> =
             Arc::new(Mutex::new(None));
 
+        // Capture the runtime handle so we can spawn tasks from the notify callback thread,
+        // which runs outside the Tokio runtime.
+        let handle = tokio::runtime::Handle::current();
+
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             let Ok(event) = res else { return };
 
@@ -39,13 +43,13 @@ impl ConfigWatcher {
             }
 
             let mut guard = pending.lock().unwrap();
-            if let Some(handle) = guard.take() {
-                handle.abort();
+            if let Some(h) = guard.take() {
+                h.abort();
             }
 
             let sender = sender.clone();
             let cfg_path = config_file();
-            *guard = Some(tokio::spawn(async move {
+            *guard = Some(handle.spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 match Config::load(&cfg_path) {
                     Ok(cfg) => {

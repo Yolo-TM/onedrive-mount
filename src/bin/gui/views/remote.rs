@@ -20,20 +20,10 @@ pub fn show(
         .num_columns(2)
         .spacing([16.0, 6.0])
         .show(ui, |ui| {
-            // Dropdown populated from `rclone listremotes`
             ui.label("rclone remote");
-            egui::ComboBox::from_id_salt("remote_name")
-                .selected_text(&remote.name)
-                .show_ui(ui, |ui| {
-                    for r in available_remotes {
-                        if ui.selectable_value(&mut remote.name, r.clone(), r).clicked() {
-                            changed = true;
-                        }
-                    }
-                });
+            ui.label(egui::RichText::new(&remote.name).monospace());
             ui.end_row();
 
-            changed |= labeled_field::show(ui, "Type", "onedrive", &mut remote.r#type);
             changed |= labeled_field::show(ui, "Mount point", "~/onedrive", &mut remote.mount_point);
             changed |= interval_input::show(ui, "Poll interval", &mut remote.poll_interval);
         });

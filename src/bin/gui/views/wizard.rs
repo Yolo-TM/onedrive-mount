@@ -92,7 +92,24 @@ fn show_question(ui: &mut egui::Ui, wizard: &mut Wizard, opt: &RcloneOption) -> 
     }
     ui.add_space(8.0);
 
+    // Yes/No exclusive questions: render as buttons that submit immediately on click
     if let Some(ref examples) = opt.examples {
+        if is_bool_exclusive(opt, examples) {
+            ui.horizontal(|ui| {
+                for ex in examples {
+                    let label = if ex.help.is_empty() { ex.value.as_str() } else { ex.help.as_str() };
+                    if ui.button(label).clicked() {
+                        wizard.current_answer = ex.value.clone();
+                        wizard.submit_answer();
+                    }
+                }
+                if wizard.can_go_back() && ui.button("← Back").clicked() {
+                    wizard.go_back();
+                }
+            });
+            return false;
+        }
+
         show_combo(ui, wizard, examples, opt.exclusive);
     } else if opt.is_password {
         ui.add(egui::TextEdit::singleline(&mut wizard.current_answer).password(true));
@@ -108,7 +125,6 @@ fn show_question(ui: &mut egui::Ui, wizard: &mut Wizard, opt: &RcloneOption) -> 
         if ui.button("Next →").clicked() {
             wizard.submit_answer();
         }
-        // Skip only makes sense when a value is optional
         if !opt.required {
             if ui.button("Skip").on_hover_text("Use the default value").clicked() {
                 wizard.current_answer.clear();
@@ -117,6 +133,13 @@ fn show_question(ui: &mut egui::Ui, wizard: &mut Wizard, opt: &RcloneOption) -> 
         }
     });
     false
+}
+
+fn is_bool_exclusive(opt: &RcloneOption, examples: &[RcloneExample]) -> bool {
+    opt.exclusive
+        && examples.len() == 2
+        && examples.iter().any(|e| e.value.eq_ignore_ascii_case("true") || e.value == "Yes")
+        && examples.iter().any(|e| e.value.eq_ignore_ascii_case("false") || e.value == "No")
 }
 
 fn show_combo(ui: &mut egui::Ui, wizard: &mut Wizard, opts: &[RcloneExample], exclusive: bool) {

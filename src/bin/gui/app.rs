@@ -8,6 +8,7 @@ use onedrive_mount::config::RemoteConfig;
 use eframe::egui;
 use onedrive_mount::status::MountState;
 use std::time::{Duration, Instant};
+use chrono::Utc;
 
 #[derive(PartialEq, Clone)]
 enum Nav {
@@ -57,11 +58,13 @@ impl eframe::App for App {
             }
         }
 
-        // Poll status file and systemd state every 2 seconds
+        // Poll status file, systemd state, and log tail every 2 seconds
         if self.state.last_status_poll.elapsed() > Duration::from_secs(2) {
             self.state.status = status_reader::read();
             self.state.daemon_active = systemd::is_active();
             self.state.service_enabled = systemd::is_enabled();
+            let log_path = onedrive_mount::paths::expand_tilde(&self.state.config.log.file);
+            self.state.log_tail.refresh(&log_path);
             self.state.last_status_poll = Instant::now();
         }
         ctx.request_repaint_after(Duration::from_secs(2));
@@ -94,20 +97,29 @@ impl eframe::App for App {
 
                 // Only show remotes that need attention (mounting or failed) — healthy mounts are noise
                 if let Some(status) = &self.state.status {
+                    let now = chrono::Utc::now();
                     for remote in &status.remotes {
-                        let (pill_color, pill_label) = match &remote.mount {
-                            MountState::Mounting => (egui::Color32::YELLOW, "…"),
-                            MountState::Failed { .. } => (egui::Color32::RED, "✗"),
+                        let (pill_color, pill_label): (egui::Color32, String) = match &remote.mount {
+                            MountState::Mounting => (egui::Color32::YELLOW, "…".into()),
+                            MountState::Failed { .. } => (egui::Color32::RED, "✗".into()),
                             _ => continue,
                         };
                         let hover = match &remote.mount {
+                            MountState::Mounting => {
+                                if let Some(started) = status.started_at {
+                                    let secs = (now - started).num_seconds().max(0);
+                                    format!("{}: Mounting ({}s)", remote.name, secs)
+                                } else {
+                                    format!("{}: Mounting…", remote.name)
+                                }
+                            }
                             MountState::Failed { error, at } => {
                                 format!("{}: Failed at {}\n{}", remote.name, at.format("%H:%M:%S"), error)
                             }
                             _ => format!("{}: {}", remote.name, mount_state_label(&remote.mount)),
                         };
                         ui.separator();
-                        ui.colored_label(pill_color, pill_label).on_hover_text(&hover);
+                        ui.colored_label(pill_color, &pill_label).on_hover_text(&hover);
                         ui.label(&remote.name);
                     }
                 }
