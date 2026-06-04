@@ -78,6 +78,9 @@
 
             mkdir -p $out/share/icons/hicolor/scalable/apps
             install -m644 assets/icon.svg $out/share/icons/hicolor/scalable/apps/onedrive-mount.svg
+
+            mkdir -p $out/share/applications
+            install -m644 assets/onedrive-mount.desktop $out/share/applications/onedrive-mount.desktop
           '';
 
           # Patch ELF rpath so the GUI binary finds its libs without LD_LIBRARY_PATH

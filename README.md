@@ -17,35 +17,56 @@ Communication is file-based: the GUI writes [`~/.config/onedrive-mount/config.to
 - `fuse` / `fuse3` for mounting
 - `systemd` user session (for service management)
 
-## Build
+## Install
 
-### NixOS (recommended)
+### NixOS — flake module
+
+Add the flake as an input and import the module:
+
+```nix
+inputs.onedrive-mount.url = "github:Yolo-TM/onedrive-mount";
+
+# in your nixosConfiguration modules:
+onedrive-mount.nixosModules.default
+{ services.onedrive-mount.enable = true; }
+```
+
+This adds both binaries to `environment.systemPackages`. The daemon runs as a per-user systemd service — start it from the GUI's **Service** tab or with `systemctl --user enable --now onedrive-mountd`.
+
+### Pre-built binaries (GitHub releases)
+
+Three variants are published per release:
+
+| Artifact | Links against | Use when |
+| --- | --- | --- |
+| `onedrive-mount-x86_64-linux` | glibc + system X11/GL | Debian, Fedora, Arch, etc. |
+| `onedrive-mountd-x86_64-linux` | glibc | same, daemon only |
+| `onedrive-mountd-x86_64-linux-musl` | nothing (fully static) | any Linux, no GUI |
+| `onedrive-mount-x86_64-linux-nix` | Nix store (rpath-patched) | NixOS without flake module |
+| `onedrive-mountd-x86_64-linux-nix` | Nix store (rpath-patched) | same, daemon only |
+
+```sh
+# example: daemon-only on an arbitrary Linux box
+curl -L https://github.com/Yolo-TM/onedrive-mount/releases/latest/download/onedrive-mountd-x86_64-linux-musl \
+  -o ~/.local/bin/onedrive-mountd && chmod +x ~/.local/bin/onedrive-mountd
+```
+
+### Build from source
+
+**NixOS:**
 
 ```sh
 nix develop
 cargo build --release --bin onedrive-mountd --features daemon
 cargo build --release --bin onedrive-mount  --features gui
+# or: nix run .#gui / nix run .#daemon
 ```
 
-Or build and run directly via flake:
-
-```sh
-nix run .#gui
-nix run .#daemon
-```
-
-### Non-NixOS
+**Other Linux** (requires `libX11`, `libGL`, `libxkbcommon`, `libXcursor`, `libXi`, `libXrandr`, `libxcb`):
 
 ```sh
 cargo build --release --bin onedrive-mountd --features daemon
 cargo build --release --bin onedrive-mount  --features gui
-```
-
-The GUI requires `libX11`, `libGL`, `libxkbcommon`, `libXcursor`, `libXi`, `libXrandr`, `libxcb` at runtime. On NixOS, the flake's `postFixup` patches the rpath so no `LD_LIBRARY_PATH` wrapper is needed.
-
-## Install
-
-```sh
 cp target/release/onedrive-mountd target/release/onedrive-mount ~/.local/bin/
 ```
 

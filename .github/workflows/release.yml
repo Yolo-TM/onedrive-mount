@@ -6,7 +6,8 @@ on:
       - "v*"
 
 jobs:
-  build:
+  # NixOS: dynamically linked, rpath-patched — for NixOS users and `nix run`
+  build-nix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,23 +18,88 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - uses: cachix/cachix-action@v15
-        with:
-          name: onedrive-rsync
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-        continue-on-error: true  # cache push is best-effort
-
       - name: Build
         run: nix build .#default
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp result/bin/onedrive-rsync  dist/onedrive-rsync-x86_64-linux
-          cp result/bin/onedrive-rsyncd dist/onedrive-rsyncd-x86_64-linux
+          cp result/bin/onedrive-mount  dist/onedrive-mount-x86_64-linux-nix
+          cp result/bin/onedrive-mountd dist/onedrive-mountd-x86_64-linux-nix
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nix
+          path: dist/
+
+  # glibc dynamic: GUI + daemon linked against system libs — works on Debian, Fedora, Arch, etc.
+  build-glibc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install GUI runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb-render0-dev \
+            libxkbcommon-dev libgl1-mesa-dev pkg-config
+
+      - name: Build daemon
+        run: cargo build --release --bin onedrive-mountd --features daemon
+
+      - name: Build GUI
+        run: cargo build --release --bin onedrive-mount --features gui
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp target/release/onedrive-mount  dist/onedrive-mount-x86_64-linux
+          cp target/release/onedrive-mountd dist/onedrive-mountd-x86_64-linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glibc
+          path: dist/
+
+  # musl static: daemon only — no dependencies, runs on any Linux
+  build-musl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: sudo apt-get install -y musl-tools
+
+      - name: Build daemon (static)
+        run: cargo build --release --bin onedrive-mountd --features daemon --target x86_64-unknown-linux-musl
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/onedrive-mountd dist/onedrive-mountd-x86_64-linux-musl
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musl
+          path: dist/
+
+  release:
+    needs: [build-nix, build-glibc, build-musl]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist/
+
+      - uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=OneDrive Mount
+Comment=Manage OneDrive mounts and sync rules
+Exec=onedrive-mount
+Icon=onedrive-mount
+Terminal=false
+Type=Application
+Categories=Network;FileTransfer;
+StartupNotify=true
