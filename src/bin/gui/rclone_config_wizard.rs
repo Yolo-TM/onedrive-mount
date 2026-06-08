@@ -169,9 +169,10 @@ impl Wizard {
             let state = self.rclone_state.clone();
             let name = self.remote_name.clone();
             let remote_type = self.remote_type.clone();
-            self.step = WizardStep::WaitingOAuth {
-                url: "http://127.0.0.1:53682/auth".into(),
-            };
+            // Extract the OAuth URL from the help text; fall back to the rclone default port
+            let url = extract_oauth_url(&option.help)
+                .unwrap_or_else(|| "http://127.0.0.1:53682/auth".into());
+            self.step = WizardStep::WaitingOAuth { url };
             let slot: Pending = Arc::new(Mutex::new(None));
             self.pending = Some(slot.clone());
             std::thread::spawn(move || {
@@ -193,6 +194,14 @@ impl Wizard {
             *slot.lock().unwrap() = Some(f());
         });
     }
+}
+
+/// Extracts the OAuth callback URL from rclone's help text for the config_is_local question.
+/// rclone prints something like: "... http://127.0.0.1:53682/auth?state=... ..."
+fn extract_oauth_url(help: &str) -> Option<String> {
+    help.split_whitespace()
+        .find(|word| word.starts_with("http://127.0.0.1") || word.starts_with("http://localhost"))
+        .map(|url| url.trim_end_matches('.').to_string())
 }
 
 fn run_rclone_step(

@@ -98,14 +98,19 @@ fn systemctl(args: &[&str]) -> Result<(), String> {
     let mut full_args = vec!["--user"];
     full_args.extend_from_slice(args);
 
-    let status = Command::new("systemctl")
+    let output = Command::new("systemctl")
         .args(&full_args)
-        .status()
+        .output()
         .map_err(|e| e.to_string())?;
 
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
-        Err(format!("systemctl {} failed", args.join(" ")))
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            Err(format!("systemctl {} failed (exit {})", args.join(" "), output.status))
+        } else {
+            Err(format!("systemctl {} failed: {}", args.join(" "), stderr))
+        }
     }
 }

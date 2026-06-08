@@ -17,7 +17,5 @@ pub fn show(ui: &mut egui::Ui, label: &str, value: &mut String) -> bool {
 }
 
 pub fn is_valid(s: &str) -> bool {
-    let s = s.trim();
-    (s.ends_with('s') || s.ends_with('m') || s.ends_with('h'))
-        && s[..s.len() - 1].parse::<u64>().is_ok()
+    onedrive_mount::defaults::parse_interval_secs(s).is_some()
 }

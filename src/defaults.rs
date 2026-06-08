@@ -64,13 +64,14 @@ pub fn rule_enabled() -> bool {
 /// Returns None for unrecognised formats.
 pub fn parse_interval_secs(s: &str) -> Option<u64> {
     let s = s.trim();
-    if let Some(n) = s.strip_suffix('s') {
-        n.parse::<u64>().ok()
+    let secs = if let Some(n) = s.strip_suffix('s') {
+        n.parse::<u64>().ok()?
     } else if let Some(n) = s.strip_suffix('m') {
-        n.parse::<u64>().ok().map(|n| n * 60)
+        n.parse::<u64>().ok()? * 60
     } else if let Some(n) = s.strip_suffix('h') {
-        n.parse::<u64>().ok().map(|n| n * 3600)
+        n.parse::<u64>().ok()? * 3600
     } else {
-        None
-    }
+        return None;
+    };
+    if secs == 0 { None } else { Some(secs) }
 }

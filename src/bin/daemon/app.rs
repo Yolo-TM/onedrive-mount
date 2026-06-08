@@ -146,6 +146,20 @@ async fn reload(
 
         if is_new {
             info!(remote = %new_remote.name, "remote added — mounting");
+            status_tx.send_modify(|s| {
+                if !s.remotes.iter().any(|r| r.name == new_remote.name) {
+                    s.remotes.push(RemoteStatus {
+                        name: new_remote.name.clone(),
+                        mount: MountState::Unmounted,
+                        sync_rules: new_remote.sync_rules.iter().filter(|r| r.enabled).map(|r| SyncRuleStatus {
+                            name: r.name.clone(),
+                            last_sync: None,
+                            next_sync: None,
+                            state: SyncState::Idle,
+                        }).collect(),
+                    });
+                }
+            });
             startup_remote(mounts, status_tx, new_remote).await;
         } else if changed {
             info!(remote = %new_remote.name, "remote config changed — remounting");
@@ -178,7 +192,7 @@ async fn reload(
     status_tx.send_modify(|s| {
         for remote in &new.remotes {
             if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
-                rs.sync_rules = remote.sync_rules.iter().map(|r| SyncRuleStatus {
+                rs.sync_rules = remote.sync_rules.iter().filter(|r| r.enabled).map(|r| SyncRuleStatus {
                     name: r.name.clone(),
                     last_sync: rs.sync_rules.iter().find(|s| s.name == r.name).and_then(|s| s.last_sync),
                     next_sync: None,
@@ -217,6 +231,11 @@ fn remote_config_changed(old: &RemoteConfig, new: &RemoteConfig) -> bool {
         || old.poll_interval != new.poll_interval
         || old.mount.vfs_cache_mode != new.mount.vfs_cache_mode
         || old.mount.vfs_cache_max_size != new.mount.vfs_cache_max_size
+        || old.mount.vfs_cache_max_age != new.mount.vfs_cache_max_age
+        || old.mount.vfs_write_back != new.mount.vfs_write_back
+        || old.mount.dir_cache_time != new.mount.dir_cache_time
+        || old.mount.transfers != new.mount.transfers
+        || old.mount.extra_flags != new.mount.extra_flags
 }
 
 fn build_initial_status(config: &Config) -> DaemonStatus {

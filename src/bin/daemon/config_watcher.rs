@@ -53,7 +53,7 @@ impl ConfigWatcher {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 match Config::load(&cfg_path) {
                     Ok(cfg) => {
-                        info!("config file changed — sending to daemon");
+                        tracing::debug!("config file changed — sending to daemon");
                         let _ = sender.send(ConfigEvent::Loaded(cfg)).await;
                     }
                     Err(e) => {

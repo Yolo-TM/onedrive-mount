@@ -38,16 +38,6 @@ pub enum MountState {
     },
 }
 
-impl MountState {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Unmounted => "Unmounted",
-            Self::Mounting => "Mounting…",
-            Self::Mounted { .. } => "Mounted",
-            Self::Failed { .. } => "Failed",
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncRuleStatus {

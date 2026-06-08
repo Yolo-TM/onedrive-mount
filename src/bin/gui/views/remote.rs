@@ -97,7 +97,7 @@ pub fn show(
                         // Sync Now — only available when the daemon is running
                         if let Some(pid) = daemon_pid {
                             if ui.button("⟳ Sync now")
-                                .on_hover_text("Trigger an immediate sync cycle for all enabled rules on this remote (sends SIGUSR1 to daemon)")
+                                .on_hover_text("Trigger an immediate sync for all enabled rules across all remotes")
                                 .clicked()
                             {
                                 sync_now_error = crate::rclone_query::sync_now(pid).err();

@@ -29,7 +29,7 @@ pub async fn run(remote_name: &str, rule: &SyncRule) -> Result<SyncOutcome> {
         .await
         .unwrap_or_else(|_| Err(anyhow::anyhow!("sync timed out after 10 minutes")))?;
 
-    info!(rule = %rule.name, remote = %remote_name, "sync completed");
+    tracing::debug!(rule = %rule.name, remote = %remote_name, "sync completed");
     Ok(SyncOutcome { at: Utc::now() })
 }
 
@@ -69,8 +69,8 @@ async fn run_copy(src: &str, dst: &str, patterns: &[String]) -> Result<()> {
 }
 
 async fn rename_conflicts(local: &PathBuf, remote: &str, rule: &SyncRule) -> Result<()> {
-    // rclone check --differ lists files that exist on both sides but have different content.
-    // We rename the local copy so the subsequent bidirectional copy keeps both versions.
+    // rclone check --differ - writes conflicting relative file paths to stdout, one per line.
+    // Exit code is non-zero when differences exist — that's expected, not an error.
     let cmd = crate::rclone::check_command(remote, &local.to_string_lossy(), &rule.patterns);
 
     let output = tokio::process::Command::from(cmd)
@@ -78,43 +78,36 @@ async fn rename_conflicts(local: &PathBuf, remote: &str, rule: &SyncRule) -> Res
         .await
         .context("spawning rclone check")?;
 
-    // rclone check exits non-zero when differences exist — that's expected
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // rclone check writes differing files to stderr with a prefix like "ERROR : filename: sizes differ"
-    for line in stderr.lines() {
-        let filename = if let Some(rest) = line.strip_prefix("ERROR : ") {
-            // "filename: sizes differ" or "filename: md5 hash differ"
-            rest.split(':').next().map(str::trim)
-        } else {
-            None
-        };
-
-        let Some(filename) = filename else { continue };
-        let local_path = local.join(filename);
-        if local_path.exists() {
-            let ts = Utc::now().format("%Y%m%dT%H%M%S");
-            let stem = local_path
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy();
-            let ext = local_path
-                .extension()
-                .map(|e| format!(".{}", e.to_string_lossy()))
-                .unwrap_or_default();
-            let conflict_name = format!("{}.conflict-{}{}", stem, ts, ext);
-            let conflict_path = local_path.with_file_name(conflict_name);
-
-            warn!(
-                from = %local_path.display(),
-                to = %conflict_path.display(),
-                "renaming conflicting local file"
-            );
-
-            tokio::fs::rename(&local_path, &conflict_path)
-                .await
-                .context("renaming conflict file")?;
+    for relative_path in stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        let local_path = local.join(relative_path);
+        if !local_path.exists() {
+            continue;
         }
+
+        let ts = Utc::now().format("%Y%m%dT%H%M%S");
+        let stem = local_path.file_stem().unwrap_or_default().to_string_lossy();
+        let ext = local_path
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
+        let conflict_name = format!("{}.conflict-{}{}", stem, ts, ext);
+        // Use parent() so subdirectory files stay in their original directory
+        let conflict_path = local_path
+            .parent()
+            .unwrap_or(local)
+            .join(conflict_name);
+
+        warn!(
+            from = %local_path.display(),
+            to = %conflict_path.display(),
+            "renaming conflicting local file"
+        );
+
+        tokio::fs::rename(&local_path, &conflict_path)
+            .await
+            .context("renaming conflict file")?;
     }
 
     Ok(())

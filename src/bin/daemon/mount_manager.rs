@@ -37,6 +37,18 @@ impl MountManager {
             .await
             .context("creating mount point")?;
 
+        // Warn if the mount point already contains files — rclone will mount on top of them,
+        // making the existing content temporarily inaccessible.
+        if let Ok(mut entries) = tokio::fs::read_dir(&mount_point).await {
+            if entries.next_entry().await.ok().flatten().is_some() {
+                warn!(
+                    remote = %remote.name,
+                    path = %mount_point.display(),
+                    "mount point is not empty — existing files will be hidden while mounted"
+                );
+            }
+        }
+
         let cmd = crate::rclone::mount_command(remote, &self.log);
         let child = tokio::process::Command::from(cmd)
             .spawn()

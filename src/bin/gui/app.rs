@@ -21,6 +21,8 @@ pub struct App {
     nav: Nav,
     /// True after the first frame — daemon auto-start runs once on startup
     did_startup: bool,
+    /// Set after a start attempt so the status bar shows "Starting…" until confirmed active
+    daemon_starting: bool,
     /// PID lock kept alive for the process lifetime
     _pid_lock: onedrive_mount::pid_lock::PidLock,
 }
@@ -31,6 +33,7 @@ impl App {
             state: State::new(),
             nav: Nav::Remotes,
             did_startup: false,
+            daemon_starting: false,
             _pid_lock: pid_lock,
         }
     }
@@ -52,22 +55,33 @@ impl eframe::App for App {
             self.state.daemon_active = systemd::is_active();
             self.state.service_enabled = systemd::is_enabled();
             if self.state.service_enabled && !self.state.daemon_active {
-                if let Err(e) = systemd::start() {
-                    self.state.service_error = Some(e);
+                match systemd::start() {
+                    Ok(()) => self.daemon_starting = true,
+                    Err(e) => self.state.service_error = Some(e),
                 }
             }
         }
 
-        // Poll status file, systemd state, and log tail every 2 seconds
-        if self.state.last_status_poll.elapsed() > Duration::from_secs(2) {
+        // While the daemon is starting, poll every 500ms so the UI updates promptly.
+        // Once confirmed active, revert to the normal 2s interval.
+        let poll_interval = if self.daemon_starting {
+            Duration::from_millis(500)
+        } else {
+            Duration::from_secs(2)
+        };
+
+        if self.state.last_status_poll.elapsed() > poll_interval {
             self.state.status = status_reader::read();
             self.state.daemon_active = systemd::is_active();
             self.state.service_enabled = systemd::is_enabled();
             let log_path = onedrive_mount::paths::expand_tilde(&self.state.config.log.file);
             self.state.log_tail.refresh(&log_path);
             self.state.last_status_poll = Instant::now();
+            if self.daemon_starting && self.state.daemon_active {
+                self.daemon_starting = false;
+            }
         }
-        ctx.request_repaint_after(Duration::from_secs(2));
+        ctx.request_repaint_after(poll_interval);
 
         // Expire save toast after TOAST_DURATION
         if let Some((_, ts)) = &self.state.save_toast {
@@ -90,6 +104,8 @@ impl eframe::App for App {
                         .map(|s| format!("● Daemon running (pid {})", s.pid))
                         .unwrap_or_else(|| "● Daemon running".into());
                     (egui::Color32::GREEN, pid_str)
+                } else if self.daemon_starting {
+                    (egui::Color32::YELLOW, "● Daemon starting…".into())
                 } else {
                     (egui::Color32::RED, "● Daemon stopped".into())
                 };

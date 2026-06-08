@@ -67,7 +67,7 @@ impl SyncScheduler {
                         };
 
                         if triggered_manually {
-                            info!(remote = %remote_name, rule = %rule.name, "manual sync triggered");
+                            tracing::debug!(remote = %remote_name, rule = %rule.name, "manual sync triggered");
                             // Reset the timer so the next automatic sync is a full interval away
                             timer.reset();
                         }
@@ -79,7 +79,7 @@ impl SyncScheduler {
 
                         match result {
                             Some(Ok(outcome)) => {
-                                info!(remote = %remote_name, rule = %rule.name, "sync succeeded");
+                                tracing::debug!(remote = %remote_name, rule = %rule.name, "sync succeeded");
                                 status_tx.send_modify(|s| set_rule_state(
                                     s, &remote_name, &rule.name,
                                     SyncState::Succeeded,
@@ -153,7 +153,7 @@ async fn run_with_retry(
             }
         }
     }
-    Some(Err(last_err.unwrap()))
+    Some(Err(last_err.unwrap_or_else(|| anyhow::anyhow!("sync failed with no error details"))))
 }
 
 fn set_rule_state(
@@ -203,14 +203,5 @@ fn update_next_sync_clear(
 }
 
 pub fn parse_interval(s: &str) -> Option<Duration> {
-    let s = s.trim();
-    if let Some(n) = s.strip_suffix('s') {
-        n.parse::<u64>().ok().map(Duration::from_secs)
-    } else if let Some(n) = s.strip_suffix('m') {
-        n.parse::<u64>().ok().map(|n| Duration::from_secs(n * 60))
-    } else if let Some(n) = s.strip_suffix('h') {
-        n.parse::<u64>().ok().map(|n| Duration::from_secs(n * 3600))
-    } else {
-        None
-    }
+    onedrive_mount::defaults::parse_interval_secs(s).map(Duration::from_secs)
 }

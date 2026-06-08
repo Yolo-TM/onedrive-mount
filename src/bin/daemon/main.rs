@@ -90,7 +90,7 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
     }
 
     let (file_writer, guard) = tracing_appender::non_blocking(
-        tracing_appender::rolling::never(log_dir, log_file),
+        tracing_appender::rolling::daily(log_dir, log_file),
     );
 
     tracing_subscriber::registry()

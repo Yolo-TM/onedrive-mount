@@ -55,10 +55,10 @@ pub fn copy_command(src: &str, dst: &str, patterns: &[String]) -> Command {
 }
 
 /// Lists files that differ between `remote` and `local` for conflict detection.
-/// Uses `--differ` to output only files that exist on both sides but have different content.
+/// Uses `--differ -` to write differing filenames to stdout (one per line, no prefix).
+/// Exit code is non-zero when differences exist — that's expected, not an error.
 pub fn check_command(remote: &str, local: &str, patterns: &[String]) -> Command {
     let mut cmd = Command::new("rclone");
-    // --differ writes conflicting file names to stderr; exit code is non-zero when any differ
     cmd.arg("check").arg(remote).arg(local).arg("--differ").arg("-");
 
     for p in patterns {
