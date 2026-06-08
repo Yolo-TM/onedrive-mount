@@ -65,7 +65,7 @@ fn invalid_poll_interval_is_caught() {
 
 #[test]
 fn valid_intervals_are_accepted() {
-    for interval in &["30s", "5m", "2h", "1s", "0s"] {
+    for interval in &["30s", "5m", "2h", "1s"] {
         let mut r = valid_remote("test");
         r.poll_interval = interval.to_string();
         let config = Config { remotes: vec![r], log: Default::default() };
