@@ -20,19 +20,20 @@ impl PidLock {
         }
 
         // Check if a previous PID file exists and that process is still alive
-        if let Ok(contents) = fs::read_to_string(path) {
-            if let Ok(pid) = contents.trim().parse::<u32>() {
-                if is_running(pid) {
-                    return Err(pid);
-                }
-            }
+        if let Ok(contents) = fs::read_to_string(path)
+            && let Ok(pid) = contents.trim().parse::<u32>()
+            && is_running(pid)
+        {
+            return Err(pid);
         }
 
         let our_pid = std::process::id();
         // Ignore write errors — better to run without a lock than to refuse to start
         let _ = fs::write(path, our_pid.to_string());
 
-        Ok(Self { path: path.to_owned() })
+        Ok(Self {
+            path: path.to_owned(),
+        })
     }
 }
 

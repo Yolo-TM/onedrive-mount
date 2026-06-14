@@ -2,12 +2,8 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use onedrive_mount::{
-    config::SyncRule,
-    conflict::ConflictStrategy,
-    paths::expand_tilde,
-};
-use std::{path::PathBuf, time::Duration};
+use onedrive_mount::{config::SyncRule, conflict::ConflictStrategy, paths::expand_tilde};
+use std::time::Duration;
 use tracing::warn;
 
 /// How long a single rclone copy/check invocation may run before we abort it.
@@ -33,7 +29,7 @@ pub async fn run(remote_name: &str, rule: &SyncRule) -> Result<SyncOutcome> {
     Ok(SyncOutcome { at: Utc::now() })
 }
 
-async fn run_inner(local: &PathBuf, remote: &str, rule: &SyncRule) -> Result<()> {
+async fn run_inner(local: &std::path::Path, remote: &str, rule: &SyncRule) -> Result<()> {
     match rule.conflict_strategy {
         ConflictStrategy::RemoteWins => {
             // Remote is SSOT; pull remote to local, overwriting stale local files
@@ -68,7 +64,7 @@ async fn run_copy(src: &str, dst: &str, patterns: &[String]) -> Result<()> {
     Ok(())
 }
 
-async fn rename_conflicts(local: &PathBuf, remote: &str, rule: &SyncRule) -> Result<()> {
+async fn rename_conflicts(local: &std::path::Path, remote: &str, rule: &SyncRule) -> Result<()> {
     // rclone check --differ - writes conflicting relative file paths to stdout, one per line.
     // Exit code is non-zero when differences exist — that's expected, not an error.
     let cmd = crate::rclone::check_command(remote, &local.to_string_lossy(), &rule.patterns);
@@ -94,10 +90,7 @@ async fn rename_conflicts(local: &PathBuf, remote: &str, rule: &SyncRule) -> Res
             .unwrap_or_default();
         let conflict_name = format!("{}.conflict-{}{}", stem, ts, ext);
         // Use parent() so subdirectory files stay in their original directory
-        let conflict_path = local_path
-            .parent()
-            .unwrap_or(local)
-            .join(conflict_name);
+        let conflict_path = local_path.parent().unwrap_or(local).join(conflict_name);
 
         warn!(
             from = %local_path.display(),

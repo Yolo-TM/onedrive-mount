@@ -56,7 +56,8 @@ impl SyncScheduler {
 
                     loop {
                         // Publish next scheduled run time before sleeping
-                        let next = chrono::Utc::now() + chrono::Duration::from_std(interval).unwrap_or_default();
+                        let next = chrono::Utc::now()
+                            + chrono::Duration::from_std(interval).unwrap_or_default();
                         update_next_sync(&status_tx, &remote_name, &rule.name, next);
 
                         // Wait for either the interval to fire or a manual trigger
@@ -73,26 +74,39 @@ impl SyncScheduler {
                         }
 
                         update_next_sync_clear(&status_tx, &remote_name, &rule.name);
-                        status_tx.send_modify(|s| set_rule_state(s, &remote_name, &rule.name, SyncState::Running, None));
+                        status_tx.send_modify(|s| {
+                            set_rule_state(s, &remote_name, &rule.name, SyncState::Running, None)
+                        });
 
                         let result = run_with_retry(&remote_name, &rule, &cancel).await;
 
                         match result {
                             Some(Ok(outcome)) => {
                                 tracing::debug!(remote = %remote_name, rule = %rule.name, "sync succeeded");
-                                status_tx.send_modify(|s| set_rule_state(
-                                    s, &remote_name, &rule.name,
-                                    SyncState::Succeeded,
-                                    Some(outcome.at),
-                                ));
+                                status_tx.send_modify(|s| {
+                                    set_rule_state(
+                                        s,
+                                        &remote_name,
+                                        &rule.name,
+                                        SyncState::Succeeded,
+                                        Some(outcome.at),
+                                    )
+                                });
                             }
                             Some(Err(e)) => {
                                 error!(remote = %remote_name, rule = %rule.name, error = %e, "sync failed after retries");
-                                status_tx.send_modify(|s| set_rule_state(
-                                    s, &remote_name, &rule.name,
-                                    SyncState::Failed { error: e.to_string(), at: chrono::Utc::now() },
-                                    None,
-                                ));
+                                status_tx.send_modify(|s| {
+                                    set_rule_state(
+                                        s,
+                                        &remote_name,
+                                        &rule.name,
+                                        SyncState::Failed {
+                                            error: e.to_string(),
+                                            at: chrono::Utc::now(),
+                                        },
+                                        None,
+                                    )
+                                });
                             }
                             None => break, // cancelled during retry sleep
                         }
@@ -153,7 +167,9 @@ async fn run_with_retry(
             }
         }
     }
-    Some(Err(last_err.unwrap_or_else(|| anyhow::anyhow!("sync failed with no error details"))))
+    Some(Err(last_err.unwrap_or_else(|| {
+        anyhow::anyhow!("sync failed with no error details")
+    })))
 }
 
 fn set_rule_state(
@@ -163,12 +179,12 @@ fn set_rule_state(
     state: SyncState,
     last_sync: Option<chrono::DateTime<chrono::Utc>>,
 ) {
-    if let Some(remote) = status.remotes.iter_mut().find(|r| r.name == remote_name) {
-        if let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule_name) {
-            rule.state = state;
-            if let Some(ts) = last_sync {
-                rule.last_sync = Some(ts);
-            }
+    if let Some(remote) = status.remotes.iter_mut().find(|r| r.name == remote_name)
+        && let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule_name)
+    {
+        rule.state = state;
+        if let Some(ts) = last_sync {
+            rule.last_sync = Some(ts);
         }
     }
 }
@@ -180,10 +196,10 @@ fn update_next_sync(
     next: chrono::DateTime<chrono::Utc>,
 ) {
     status_tx.send_modify(|s| {
-        if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == remote_name) {
-            if let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule_name) {
-                rule.next_sync = Some(next);
-            }
+        if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == remote_name)
+            && let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule_name)
+        {
+            rule.next_sync = Some(next);
         }
     });
 }
@@ -194,10 +210,10 @@ fn update_next_sync_clear(
     rule_name: &str,
 ) {
     status_tx.send_modify(|s| {
-        if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == remote_name) {
-            if let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule_name) {
-                rule.next_sync = None;
-            }
+        if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == remote_name)
+            && let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule_name)
+        {
+            rule.next_sync = None;
         }
     });
 }

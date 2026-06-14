@@ -129,13 +129,22 @@ impl Config {
 
             for rule in &remote.sync_rules {
                 if rule.name.is_empty() {
-                    errors.push(format!("Remote '{}': a sync rule has an empty name.", remote.name));
+                    errors.push(format!(
+                        "Remote '{}': a sync rule has an empty name.",
+                        remote.name
+                    ));
                 }
                 if rule.local_path.is_empty() {
-                    errors.push(format!("Remote '{}', rule '{}': local path is empty.", remote.name, rule.name));
+                    errors.push(format!(
+                        "Remote '{}', rule '{}': local path is empty.",
+                        remote.name, rule.name
+                    ));
                 }
                 if rule.remote_path.is_empty() {
-                    errors.push(format!("Remote '{}', rule '{}': remote path is empty.", remote.name, rule.name));
+                    errors.push(format!(
+                        "Remote '{}', rule '{}': remote path is empty.",
+                        remote.name, rule.name
+                    ));
                 }
                 if crate::defaults::parse_interval_secs(&rule.interval).is_none() {
                     errors.push(format!(

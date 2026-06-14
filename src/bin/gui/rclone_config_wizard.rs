@@ -99,7 +99,10 @@ impl Wizard {
     pub fn go_back(&mut self) {
         if let Some(entry) = self.history.pop() {
             self.rclone_state = entry.rclone_state.clone();
-            self.current_answer = entry.question.option.as_ref()
+            self.current_answer = entry
+                .question
+                .option
+                .as_ref()
                 .map(|o| o.default_str.clone())
                 .unwrap_or_default();
             self.step = WizardStep::Question(entry.question);
@@ -216,10 +219,13 @@ fn run_rclone_step(
         cmd.args(["config", "create", "--non-interactive", name, remote_type]);
     } else {
         cmd.args([
-            "config", "update",
+            "config",
+            "update",
             "--continue",
-            "--state", state,
-            "--result", result,
+            "--state",
+            state,
+            "--result",
+            result,
             name,
         ]);
     }
@@ -230,12 +236,17 @@ fn run_rclone_step(
     if stdout.trim().is_empty() {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(stderr.lines()
+            return Err(stderr
+                .lines()
                 .find(|l| l.contains("Error:"))
                 .unwrap_or(stderr.trim())
                 .to_string());
         }
-        return Ok(RcloneQuestion { state: String::new(), option: None, error: String::new() });
+        return Ok(RcloneQuestion {
+            state: String::new(),
+            option: None,
+            error: String::new(),
+        });
     }
 
     serde_json::from_str(stdout.trim())

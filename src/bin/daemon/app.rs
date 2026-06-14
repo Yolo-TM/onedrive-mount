@@ -1,6 +1,11 @@
 // Top-level daemon: initialises all subsystems and drives the main event loop
 
-use crate::{config_watcher::{ConfigEvent, ConfigWatcher}, mount_manager::MountManager, sync_scheduler::SyncScheduler, status_writer};
+use crate::{
+    config_watcher::{ConfigEvent, ConfigWatcher},
+    mount_manager::MountManager,
+    status_writer,
+    sync_scheduler::SyncScheduler,
+};
 use anyhow::Result;
 use chrono::Utc;
 use onedrive_mount::{
@@ -11,7 +16,6 @@ use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
-
 
 pub async fn run(config: Config) -> Result<()> {
     let (status_tx, status_rx) = watch::channel(build_initial_status(&config));
@@ -87,10 +91,13 @@ async fn startup_remote(
     status_tx: &watch::Sender<DaemonStatus>,
     remote: &RemoteConfig,
 ) {
-    let state = mounts.start(remote).await.unwrap_or_else(|e| MountState::Failed {
-        error: e.to_string(),
-        at: Utc::now(),
-    });
+    let state = mounts
+        .start(remote)
+        .await
+        .unwrap_or_else(|e| MountState::Failed {
+            error: e.to_string(),
+            at: Utc::now(),
+        });
 
     status_tx.send_modify(|s| {
         if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
@@ -123,7 +130,9 @@ async fn reload(
     // New or changed remotes get restarted; disabled ones get stopped
     for new_remote in &new.remotes {
         if !new_remote.enabled {
-            let was_enabled = old.remotes.iter()
+            let was_enabled = old
+                .remotes
+                .iter()
                 .find(|r| r.name == new_remote.name)
                 .map(|r| r.enabled)
                 .unwrap_or(false);
@@ -140,7 +149,10 @@ async fn reload(
         }
 
         let is_new = !old.remotes.iter().any(|r| r.name == new_remote.name);
-        let changed = old.remotes.iter().find(|r| r.name == new_remote.name)
+        let changed = old
+            .remotes
+            .iter()
+            .find(|r| r.name == new_remote.name)
             .map(|old_remote| remote_config_changed(old_remote, new_remote))
             .unwrap_or(false);
 
@@ -151,12 +163,17 @@ async fn reload(
                     s.remotes.push(RemoteStatus {
                         name: new_remote.name.clone(),
                         mount: MountState::Unmounted,
-                        sync_rules: new_remote.sync_rules.iter().filter(|r| r.enabled).map(|r| SyncRuleStatus {
-                            name: r.name.clone(),
-                            last_sync: None,
-                            next_sync: None,
-                            state: SyncState::Idle,
-                        }).collect(),
+                        sync_rules: new_remote
+                            .sync_rules
+                            .iter()
+                            .filter(|r| r.enabled)
+                            .map(|r| SyncRuleStatus {
+                                name: r.name.clone(),
+                                last_sync: None,
+                                next_sync: None,
+                                state: SyncState::Idle,
+                            })
+                            .collect(),
                     });
                 }
             });
@@ -170,18 +187,29 @@ async fn reload(
         // Log sync rule changes within this remote
         if let Some(old_remote) = old.remotes.iter().find(|r| r.name == new_remote.name) {
             for old_rule in &old_remote.sync_rules {
-                if !new_remote.sync_rules.iter().any(|r| r.name == old_rule.name) {
+                if !new_remote
+                    .sync_rules
+                    .iter()
+                    .any(|r| r.name == old_rule.name)
+                {
                     info!(remote = %new_remote.name, rule = %old_rule.name, "sync rule removed");
                 }
             }
             for new_rule in &new_remote.sync_rules {
-                let old_rule = old_remote.sync_rules.iter().find(|r| r.name == new_rule.name);
+                let old_rule = old_remote
+                    .sync_rules
+                    .iter()
+                    .find(|r| r.name == new_rule.name);
                 match old_rule {
-                    None => info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule added"),
-                    Some(old) if !old.enabled && new_rule.enabled =>
-                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule enabled"),
-                    Some(old) if old.enabled && !new_rule.enabled =>
-                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule disabled"),
+                    None => {
+                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule added")
+                    }
+                    Some(old) if !old.enabled && new_rule.enabled => {
+                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule enabled")
+                    }
+                    Some(old) if old.enabled && !new_rule.enabled => {
+                        info!(remote = %new_remote.name, rule = %new_rule.name, "sync rule disabled")
+                    }
                     _ => {}
                 }
             }
@@ -192,12 +220,21 @@ async fn reload(
     status_tx.send_modify(|s| {
         for remote in &new.remotes {
             if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
-                rs.sync_rules = remote.sync_rules.iter().filter(|r| r.enabled).map(|r| SyncRuleStatus {
-                    name: r.name.clone(),
-                    last_sync: rs.sync_rules.iter().find(|s| s.name == r.name).and_then(|s| s.last_sync),
-                    next_sync: None,
-                    state: SyncState::Idle,
-                }).collect();
+                rs.sync_rules = remote
+                    .sync_rules
+                    .iter()
+                    .filter(|r| r.enabled)
+                    .map(|r| SyncRuleStatus {
+                        name: r.name.clone(),
+                        last_sync: rs
+                            .sync_rules
+                            .iter()
+                            .find(|s| s.name == r.name)
+                            .and_then(|s| s.last_sync),
+                        next_sync: None,
+                        state: SyncState::Idle,
+                    })
+                    .collect();
             }
         }
     });
@@ -243,15 +280,24 @@ fn build_initial_status(config: &Config) -> DaemonStatus {
         pid: std::process::id(),
         started_at: Some(Utc::now()),
         config_error: None,
-        remotes: config.remotes.iter().map(|r| RemoteStatus {
-            name: r.name.clone(),
-            mount: MountState::Unmounted,
-            sync_rules: r.sync_rules.iter().filter(|rule| rule.enabled).map(|rule| SyncRuleStatus {
-                name: rule.name.clone(),
-                last_sync: None,
-                next_sync: None,
-                state: SyncState::Idle,
-            }).collect(),
-        }).collect(),
+        remotes: config
+            .remotes
+            .iter()
+            .map(|r| RemoteStatus {
+                name: r.name.clone(),
+                mount: MountState::Unmounted,
+                sync_rules: r
+                    .sync_rules
+                    .iter()
+                    .filter(|rule| rule.enabled)
+                    .map(|rule| SyncRuleStatus {
+                        name: rule.name.clone(),
+                        last_sync: None,
+                        next_sync: None,
+                        state: SyncState::Idle,
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
 }

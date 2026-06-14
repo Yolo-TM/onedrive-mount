@@ -39,14 +39,14 @@ impl MountManager {
 
         // Warn if the mount point already contains files — rclone will mount on top of them,
         // making the existing content temporarily inaccessible.
-        if let Ok(mut entries) = tokio::fs::read_dir(&mount_point).await {
-            if entries.next_entry().await.ok().flatten().is_some() {
-                warn!(
-                    remote = %remote.name,
-                    path = %mount_point.display(),
-                    "mount point is not empty — existing files will be hidden while mounted"
-                );
-            }
+        if let Ok(mut entries) = tokio::fs::read_dir(&mount_point).await
+            && entries.next_entry().await.ok().flatten().is_some()
+        {
+            warn!(
+                remote = %remote.name,
+                path = %mount_point.display(),
+                "mount point is not empty — existing files will be hidden while mounted"
+            );
         }
 
         let cmd = crate::rclone::mount_command(remote, &self.log);
@@ -55,7 +55,8 @@ impl MountManager {
             .context("spawning rclone mount")?;
 
         info!(remote = %remote.name, path = %mount_point.display(), "rclone mount started");
-        self.mounts.insert(remote.name.clone(), MountEntry { child, since: None });
+        self.mounts
+            .insert(remote.name.clone(), MountEntry { child, since: None });
 
         Ok(MountState::Mounting)
     }
@@ -149,7 +150,10 @@ impl MountManager {
             Ok(state) => state,
             Err(e) => {
                 error!(remote = %remote.name, error = %e, "remount failed");
-                MountState::Failed { error: e.to_string(), at: Utc::now() }
+                MountState::Failed {
+                    error: e.to_string(),
+                    at: Utc::now(),
+                }
             }
         }
     }

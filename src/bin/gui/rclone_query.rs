@@ -10,7 +10,10 @@ pub fn sync_now(daemon_pid: u32) -> Result<(), String> {
         if ret == 0 {
             Ok(())
         } else {
-            Err(format!("kill({daemon_pid}, SIGUSR1) failed: {}", std::io::Error::last_os_error()))
+            Err(format!(
+                "kill({daemon_pid}, SIGUSR1) failed: {}",
+                std::io::Error::last_os_error()
+            ))
         }
     }
     #[cfg(not(unix))]
@@ -25,7 +28,11 @@ pub fn delete_remote(name: &str) -> Result<(), String> {
         .args(["config", "delete", name])
         .status()
         .map_err(|e| e.to_string())?;
-    if status.success() { Ok(()) } else { Err(format!("rclone config delete {name} failed")) }
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("rclone config delete {name} failed"))
+    }
 }
 
 pub fn list_remotes() -> Vec<String> {

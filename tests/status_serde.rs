@@ -10,7 +10,9 @@ fn sample_status() -> DaemonStatus {
         config_error: None,
         remotes: vec![RemoteStatus {
             name: "onedrive".into(),
-            mount: MountState::Mounted { since: chrono::Utc::now() },
+            mount: MountState::Mounted {
+                since: chrono::Utc::now(),
+            },
             sync_rules: vec![SyncRuleStatus {
                 name: "docs".into(),
                 last_sync: Some(chrono::Utc::now()),
@@ -31,7 +33,10 @@ fn roundtrip_full_status() {
     assert_eq!(loaded.pid, 12345);
     assert_eq!(loaded.remotes.len(), 1);
     assert_eq!(loaded.remotes[0].name, "onedrive");
-    assert!(matches!(loaded.remotes[0].mount, MountState::Mounted { .. }));
+    assert!(matches!(
+        loaded.remotes[0].mount,
+        MountState::Mounted { .. }
+    ));
     assert_eq!(loaded.remotes[0].sync_rules[0].state, SyncState::Succeeded);
 }
 
@@ -58,7 +63,10 @@ fn config_error_roundtrip() {
     let tmp = NamedTempFile::new().unwrap();
     status.save(tmp.path()).unwrap();
     let loaded = DaemonStatus::load(tmp.path()).unwrap();
-    assert_eq!(loaded.config_error.as_deref(), Some("unexpected key on line 5"));
+    assert_eq!(
+        loaded.config_error.as_deref(),
+        Some("unexpected key on line 5")
+    );
 }
 
 #[test]
@@ -68,7 +76,10 @@ fn config_error_none_not_written() {
     let tmp = NamedTempFile::new().unwrap();
     status.save(tmp.path()).unwrap();
     let raw = std::fs::read_to_string(tmp.path()).unwrap();
-    assert!(!raw.contains("config_error"), "None config_error should not appear in TOML");
+    assert!(
+        !raw.contains("config_error"),
+        "None config_error should not appear in TOML"
+    );
 }
 
 #[test]
@@ -85,5 +96,8 @@ fn atomic_save_is_not_partial() {
     status.save(tmp.path()).unwrap();
     // Tmp file should be gone (renamed away)
     let tmp_path = tmp.path().with_extension("toml.tmp");
-    assert!(!tmp_path.exists(), ".tmp file should be cleaned up after save");
+    assert!(
+        !tmp_path.exists(),
+        ".tmp file should be cleaned up after save"
+    );
 }

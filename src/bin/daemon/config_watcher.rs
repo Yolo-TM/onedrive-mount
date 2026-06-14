@@ -28,8 +28,7 @@ impl ConfigWatcher {
             std::fs::create_dir_all(dir)?;
         }
 
-        let pending: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> =
-            Arc::new(Mutex::new(None));
+        let pending: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
 
         // Capture the runtime handle so we can spawn tasks from the notify callback thread,
         // which runs outside the Tokio runtime.

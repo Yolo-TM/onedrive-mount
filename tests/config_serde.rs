@@ -53,7 +53,10 @@ fn roundtrip_full_config() {
     assert_eq!(r.mount.transfers, 8);
     assert_eq!(r.sync_rules.len(), 1);
     assert_eq!(r.sync_rules[0].name, "docs");
-    assert!(matches!(r.sync_rules[0].conflict_strategy, ConflictStrategy::RemoteWins));
+    assert!(matches!(
+        r.sync_rules[0].conflict_strategy,
+        ConflictStrategy::RemoteWins
+    ));
 }
 
 #[test]

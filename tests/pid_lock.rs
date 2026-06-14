@@ -39,7 +39,10 @@ fn second_acquire_fails_while_first_held() {
 
     let _lock1 = PidLock::acquire(&path).unwrap();
     let result = PidLock::acquire(&path);
-    assert!(result.is_err(), "second acquire should fail while first is held");
+    assert!(
+        result.is_err(),
+        "second acquire should fail while first is held"
+    );
 }
 
 #[test]
@@ -52,7 +55,10 @@ fn second_acquire_succeeds_after_first_dropped() {
     }
     // After drop the file is gone, so a new acquire should succeed
     let lock2 = PidLock::acquire(&path);
-    assert!(lock2.is_ok(), "acquire should succeed after previous lock dropped");
+    assert!(
+        lock2.is_ok(),
+        "acquire should succeed after previous lock dropped"
+    );
 }
 
 #[test]
@@ -64,5 +70,8 @@ fn stale_pid_file_with_dead_pid_is_overwritten() {
     std::fs::write(&path, "999999999").unwrap();
 
     let lock = PidLock::acquire(&path);
-    assert!(lock.is_ok(), "stale PID file with dead process should be overwritten");
+    assert!(
+        lock.is_ok(),
+        "stale PID file with dead process should be overwritten"
+    );
 }

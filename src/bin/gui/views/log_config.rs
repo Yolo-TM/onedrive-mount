@@ -62,7 +62,10 @@ pub fn show(ui: &mut egui::Ui, log: &mut LogConfig, cache: &mut LogTailCache) ->
                 .selected_text(&log.level)
                 .show_ui(ui, |ui| {
                     for level in LOG_LEVELS {
-                        if ui.selectable_value(&mut log.level, level.to_string(), *level).clicked() {
+                        if ui
+                            .selectable_value(&mut log.level, level.to_string(), *level)
+                            .clicked()
+                        {
                             changed = true;
                         }
                     }
@@ -73,7 +76,11 @@ pub fn show(ui: &mut egui::Ui, log: &mut LogConfig, cache: &mut LogTailCache) ->
     ui.add_space(12.0);
     ui.separator();
     ui.add_space(4.0);
-    ui.label(egui::RichText::new(format!("Last {} lines", TAIL_LINES)).small().weak());
+    ui.label(
+        egui::RichText::new(format!("Last {} lines", TAIL_LINES))
+            .small()
+            .weak(),
+    );
     ui.add_space(4.0);
 
     let path = expand_tilde(&log.file);

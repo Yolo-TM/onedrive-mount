@@ -1,11 +1,15 @@
 // Root egui application: sidebar navigation and content dispatch
 
 use crate::{
-    config_io, rclone_config_wizard::Wizard, rclone_query, state::State, status_reader, systemd,
+    config_io,
+    rclone_config_wizard::Wizard,
+    rclone_query,
+    state::State,
+    status_reader, systemd,
     views::{log_config, remote, service, wizard},
 };
-use onedrive_mount::config::RemoteConfig;
 use eframe::egui;
+use onedrive_mount::config::RemoteConfig;
 use onedrive_mount::status::MountState;
 use std::time::{Duration, Instant};
 
@@ -27,7 +31,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(_cc: &eframe::CreationContext<'_>, pid_lock: onedrive_mount::pid_lock::PidLock) -> Self {
+    pub fn new(
+        _cc: &eframe::CreationContext<'_>,
+        pid_lock: onedrive_mount::pid_lock::PidLock,
+    ) -> Self {
         Self {
             state: State::new(),
             nav: Nav::Remotes,
@@ -80,21 +87,22 @@ impl eframe::App for App {
                 self.daemon_starting = false;
             }
             // If the service is installed but not running, surface the last journal error
-            if self.state.service_enabled && !self.state.daemon_active && !self.daemon_starting {
-                if let Some(err) = systemd::last_exit_error() {
-                    if self.state.service_error.is_none() {
-                        self.state.service_error = Some(format!("Daemon stopped: {err}"));
-                    }
-                }
+            if self.state.service_enabled
+                && !self.state.daemon_active
+                && !self.daemon_starting
+                && let Some(err) = systemd::last_exit_error()
+                && self.state.service_error.is_none()
+            {
+                self.state.service_error = Some(format!("Daemon stopped: {err}"));
             }
         }
         ctx.request_repaint_after(poll_interval);
 
         // Expire save toast after TOAST_DURATION
-        if let Some((_, ts)) = &self.state.save_toast {
-            if ts.elapsed() > TOAST_DURATION {
-                self.state.save_toast = None;
-            }
+        if let Some((_, ts)) = &self.state.save_toast
+            && ts.elapsed() > TOAST_DURATION
+        {
+            self.state.save_toast = None;
         }
 
         // Wizard shown as a modal overlay when active
@@ -205,13 +213,11 @@ impl eframe::App for App {
         });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                match self.nav {
-                    Nav::Remotes => show_remotes(ui, &mut self.state),
-                    Nav::Logging => {
-                        if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
-                            self.state.config_dirty = true;
-                        }
+            egui::ScrollArea::vertical().show(ui, |ui| match self.nav {
+                Nav::Remotes => show_remotes(ui, &mut self.state),
+                Nav::Logging => {
+                    if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
+                        self.state.config_dirty = true;
                     }
                 }
             });
@@ -223,7 +229,9 @@ fn show_wizard_modal(ctx: &egui::Context, _ui: &mut egui::Ui, state: &mut State)
     let modal = egui::Modal::new(egui::Id::new("rclone_wizard")).show(ctx, |ui| {
         ui.set_min_width(480.0);
 
-        let Some(w) = state.wizard.as_mut() else { return };
+        let Some(w) = state.wizard.as_mut() else {
+            return;
+        };
 
         let done = wizard::show(ui, w);
         if done {
@@ -239,20 +247,21 @@ fn show_wizard_modal(ctx: &egui::Context, _ui: &mut egui::Ui, state: &mut State)
         if ui.button("✕ Cancel").clicked() {
             // If rclone already created the remote (wizard progressed past Init),
             // offer to clean it up rather than leaving an orphan.
-            if let Some(w) = &state.wizard {
-                if w.step != crate::rclone_config_wizard::WizardStep::Init
-                    && !w.remote_name.is_empty()
-                {
-                    let name = w.remote_name.clone();
-                    state.wizard = None;
-                    // Delete the partial remote silently; surface error if it fails
-                    if let Err(e) = rclone_query::delete_remote(&name) {
-                        state.service_error = Some(format!("Cancelled — could not clean up partial remote '{name}': {e}"));
-                    } else {
-                        state.available_remotes = rclone_query::list_remotes();
-                    }
-                    return;
+            if let Some(w) = &state.wizard
+                && w.step != crate::rclone_config_wizard::WizardStep::Init
+                && !w.remote_name.is_empty()
+            {
+                let name = w.remote_name.clone();
+                state.wizard = None;
+                // Delete the partial remote silently; surface error if it fails
+                if let Err(e) = rclone_query::delete_remote(&name) {
+                    state.service_error = Some(format!(
+                        "Cancelled — could not clean up partial remote '{name}': {e}"
+                    ));
+                } else {
+                    state.available_remotes = rclone_query::list_remotes();
                 }
+                return;
             }
             state.wizard = None;
         }
@@ -282,17 +291,26 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
                 if ui.selectable_label(selected, &name).clicked() {
                     state.selected_remote = if selected { None } else { Some(i) };
                 }
-                if selected {
-                    if ui.small_button("Remove").on_hover_text("Remove from app config (does not delete the rclone remote)").clicked() {
-                        remove_idx = Some(i);
-                    }
+                if selected
+                    && ui
+                        .small_button("Remove")
+                        .on_hover_text("Remove from app config (does not delete the rclone remote)")
+                        .clicked()
+                {
+                    remove_idx = Some(i);
                 }
             });
 
             // Inline editor — expands directly under the selected remote
             if selected {
                 ui.indent(format!("remote_editor_{i}"), |ui| {
-                    if remote::show(ui, &mut state.config.remotes[i], &state.status, &state.available_remotes, &mut state.service_error) {
+                    if remote::show(
+                        ui,
+                        &mut state.config.remotes[i],
+                        &state.status,
+                        &state.available_remotes,
+                        &mut state.service_error,
+                    ) {
                         state.config_dirty = true;
                     }
                 });
@@ -310,14 +328,25 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
     }
 
     // rclone remotes not yet in the app config
-    let configured_names: Vec<_> = state.config.remotes.iter().map(|r| r.name.clone()).collect();
-    let untracked: Vec<_> = state.available_remotes.iter()
+    let configured_names: Vec<_> = state
+        .config
+        .remotes
+        .iter()
+        .map(|r| r.name.clone())
+        .collect();
+    let untracked: Vec<_> = state
+        .available_remotes
+        .iter()
         .filter(|n| !configured_names.contains(n))
         .cloned()
         .collect();
 
     if !untracked.is_empty() {
-        ui.label(egui::RichText::new("rclone remotes (not in app config)").small().weak());
+        ui.label(
+            egui::RichText::new("rclone remotes (not in app config)")
+                .small()
+                .weak(),
+        );
         ui.add_space(2.0);
 
         let mut to_add: Option<String> = None;
@@ -325,10 +354,18 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
         for name in &untracked {
             ui.horizontal(|ui| {
                 ui.label(name);
-                if ui.small_button("Add to config").on_hover_text("Add mount and sync settings for this remote").clicked() {
+                if ui
+                    .small_button("Add to config")
+                    .on_hover_text("Add mount and sync settings for this remote")
+                    .clicked()
+                {
                     to_add = Some(name.clone());
                 }
-                if ui.small_button("Delete").on_hover_text("Permanently remove from rclone").clicked() {
+                if ui
+                    .small_button("Delete")
+                    .on_hover_text("Permanently remove from rclone")
+                    .clicked()
+                {
                     to_delete = Some(name.clone());
                 }
             });
@@ -362,7 +399,8 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
     }
 
     ui.separator();
-    if ui.button("Setup new remote…")
+    if ui
+        .button("Setup new remote…")
         .on_hover_text("Create and authenticate a new rclone remote without leaving the app")
         .clicked()
     {

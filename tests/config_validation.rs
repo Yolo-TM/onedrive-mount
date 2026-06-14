@@ -38,7 +38,10 @@ fn valid_config_has_no_errors() {
 
 #[test]
 fn empty_remote_name_is_invalid() {
-    let mut config = Config { remotes: vec![valid_remote("")], log: Default::default() };
+    let mut config = Config {
+        remotes: vec![valid_remote("")],
+        log: Default::default(),
+    };
     config.remotes[0].name = String::new();
     let errors = config.validate();
     assert!(!errors.is_empty());
@@ -49,7 +52,10 @@ fn empty_remote_name_is_invalid() {
 fn empty_mount_point_is_invalid() {
     let mut r = valid_remote("test");
     r.mount_point = String::new();
-    let config = Config { remotes: vec![r], log: Default::default() };
+    let config = Config {
+        remotes: vec![r],
+        log: Default::default(),
+    };
     let errors = config.validate();
     assert!(errors.iter().any(|e| e.contains("mount point")));
 }
@@ -58,7 +64,10 @@ fn empty_mount_point_is_invalid() {
 fn invalid_poll_interval_is_caught() {
     let mut r = valid_remote("test");
     r.poll_interval = "notaninterval".into();
-    let config = Config { remotes: vec![r], log: Default::default() };
+    let config = Config {
+        remotes: vec![r],
+        log: Default::default(),
+    };
     let errors = config.validate();
     assert!(errors.iter().any(|e| e.contains("poll interval")));
 }
@@ -68,8 +77,15 @@ fn valid_intervals_are_accepted() {
     for interval in &["30s", "5m", "2h", "1s"] {
         let mut r = valid_remote("test");
         r.poll_interval = interval.to_string();
-        let config = Config { remotes: vec![r], log: Default::default() };
-        assert!(config.validate().is_empty(), "interval '{}' should be valid", interval);
+        let config = Config {
+            remotes: vec![r],
+            log: Default::default(),
+        };
+        assert!(
+            config.validate().is_empty(),
+            "interval '{}' should be valid",
+            interval
+        );
     }
 }
 
@@ -79,7 +95,10 @@ fn rule_with_empty_local_path_is_invalid() {
     rule.local_path = String::new();
     let mut r = valid_remote("test");
     r.sync_rules = vec![rule];
-    let config = Config { remotes: vec![r], log: Default::default() };
+    let config = Config {
+        remotes: vec![r],
+        log: Default::default(),
+    };
     let errors = config.validate();
     assert!(errors.iter().any(|e| e.contains("local path")));
 }
@@ -90,7 +109,10 @@ fn rule_with_empty_remote_path_is_invalid() {
     rule.remote_path = String::new();
     let mut r = valid_remote("test");
     r.sync_rules = vec![rule];
-    let config = Config { remotes: vec![r], log: Default::default() };
+    let config = Config {
+        remotes: vec![r],
+        log: Default::default(),
+    };
     let errors = config.validate();
     assert!(errors.iter().any(|e| e.contains("remote path")));
 }
@@ -101,7 +123,10 @@ fn rule_with_invalid_interval_is_caught() {
     rule.interval = "bad".into();
     let mut r = valid_remote("test");
     r.sync_rules = vec![rule];
-    let config = Config { remotes: vec![r], log: Default::default() };
+    let config = Config {
+        remotes: vec![r],
+        log: Default::default(),
+    };
     let errors = config.validate();
     assert!(errors.iter().any(|e| e.contains("interval")));
 }
@@ -110,7 +135,14 @@ fn rule_with_invalid_interval_is_caught() {
 fn multiple_errors_all_reported() {
     let mut r = valid_remote("");
     r.mount_point = String::new();
-    let config = Config { remotes: vec![r], log: Default::default() };
+    let config = Config {
+        remotes: vec![r],
+        log: Default::default(),
+    };
     let errors = config.validate();
-    assert!(errors.len() >= 2, "expected at least 2 errors, got: {:?}", errors);
+    assert!(
+        errors.len() >= 2,
+        "expected at least 2 errors, got: {:?}",
+        errors
+    );
 }

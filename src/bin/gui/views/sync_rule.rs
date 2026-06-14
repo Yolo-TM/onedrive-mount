@@ -35,7 +35,7 @@ pub fn show(ui: &mut egui::Ui, rule: &mut SyncRule) -> bool {
                 .selected_text(rule.conflict_strategy.label())
                 .show_ui(ui, |ui| {
                     for strategy in ConflictStrategy::all() {
-                        let (label, tooltip) = conflict_tooltip(&strategy);
+                        let (label, tooltip) = conflict_tooltip(strategy);
                         if ui.selectable_value(&mut rule.conflict_strategy, *strategy, label)
                             .on_hover_text(tooltip)
                             .clicked()

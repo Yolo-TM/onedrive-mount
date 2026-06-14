@@ -33,7 +33,8 @@ fn unit_content(binary_path: &std::path::Path) -> String {
 /// Resolves the daemon binary path from the current executable's directory,
 /// verifies it actually exists and is executable before writing the unit file.
 fn daemon_binary_path() -> Result<PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("cannot locate current executable: {e}"))?;
+    let exe =
+        std::env::current_exe().map_err(|e| format!("cannot locate current executable: {e}"))?;
     let dir = exe.parent().ok_or("executable has no parent directory")?;
     let daemon = dir.join("onedrive-mountd");
 
@@ -43,8 +44,7 @@ fn daemon_binary_path() -> Result<PathBuf, String> {
         .map_err(|_| format!("daemon binary not found at {}: run 'cargo build --bin onedrive-mountd --features daemon' first", daemon.display()))?;
 
     // Basic sanity check: must be a regular file
-    let meta = fs::metadata(&daemon)
-        .map_err(|e| format!("cannot stat daemon binary: {e}"))?;
+    let meta = fs::metadata(&daemon).map_err(|e| format!("cannot stat daemon binary: {e}"))?;
     if !meta.is_file() {
         return Err(format!("{} is not a regular file", daemon.display()));
     }
@@ -98,14 +98,23 @@ pub fn is_enabled() -> bool {
 /// Used to surface crash reasons (e.g. rclone not found) when the service is inactive.
 pub fn last_exit_error() -> Option<String> {
     let output = Command::new("journalctl")
-        .args(["--user", "-u", "onedrive-mountd.service", "-n", "20", "--no-pager", "-o", "cat"])
+        .args([
+            "--user",
+            "-u",
+            "onedrive-mountd.service",
+            "-n",
+            "20",
+            "--no-pager",
+            "-o",
+            "cat",
+        ])
         .output()
         .ok()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.lines()
-        .filter(|l| l.contains("error:") || l.contains("Error") || l.contains("not found"))
-        .last()
+    stdout
+        .lines()
+        .rfind(|l| l.contains("error:") || l.contains("Error") || l.contains("not found"))
         .map(|l| l.trim().to_string())
 }
 
@@ -123,7 +132,11 @@ fn systemctl(args: &[&str]) -> Result<(), String> {
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         if stderr.is_empty() {
-            Err(format!("systemctl {} failed (exit {})", args.join(" "), output.status))
+            Err(format!(
+                "systemctl {} failed (exit {})",
+                args.join(" "),
+                output.status
+            ))
         } else {
             Err(format!("systemctl {} failed: {}", args.join(" "), stderr))
         }

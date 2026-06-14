@@ -11,9 +11,13 @@ mod sync_scheduler;
 mod tests;
 
 use anyhow::{Context, Result};
-use onedrive_mount::{config::Config, paths::{config_file, daemon_pid_file, expand_tilde}, pid_lock::PidLock};
+use onedrive_mount::{
+    config::Config,
+    paths::{config_file, daemon_pid_file, expand_tilde},
+    pid_lock::PidLock,
+};
 use tracing::error;
-use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -75,15 +79,18 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
     let level = config.log.level.to_lowercase();
 
     let filter = EnvFilter::try_new(match level.as_str() {
-        "debug"  => "debug",
-        "info"   => "info",
+        "debug" => "debug",
+        "info" => "info",
         "notice" => "info",
-        "error"  => "error",
-        _        => "info",
-    }).unwrap_or_else(|_| EnvFilter::new("info"));
+        "error" => "error",
+        _ => "info",
+    })
+    .unwrap_or_else(|_| EnvFilter::new("info"));
 
-    let log_dir  = log_path.parent().unwrap_or(std::path::Path::new("."));
-    let log_file = log_path.file_name().unwrap_or(std::ffi::OsStr::new("onedrive-mount.log"));
+    let log_dir = log_path.parent().unwrap_or(std::path::Path::new("."));
+    let log_file = log_path
+        .file_name()
+        .unwrap_or(std::ffi::OsStr::new("onedrive-mount.log"));
 
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -93,22 +100,25 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
     // We use a fixed filename (never-rolling) so the GUI always knows where to read.
     const MAX_LOG_BYTES: usize = 10 * 1024 * 1024;
     const KEEP_LOG_BYTES: usize = 5 * 1024 * 1024;
-    if std::fs::metadata(&log_path).map(|m| m.len() as usize).unwrap_or(0) > MAX_LOG_BYTES {
-        if let Ok(content) = std::fs::read(&log_path) {
-            if content.len() > KEEP_LOG_BYTES {
-                let start = content.len() - KEEP_LOG_BYTES;
-                // Advance to the next newline so we don't keep a partial line at the start
-                let split = content[start..].iter().position(|&b| b == b'\n')
-                    .map(|p| start + p + 1)
-                    .unwrap_or(start);
-                let _ = std::fs::write(&log_path, &content[split..]);
-            }
-        }
+    if std::fs::metadata(&log_path)
+        .map(|m| m.len() as usize)
+        .unwrap_or(0)
+        > MAX_LOG_BYTES
+        && let Ok(content) = std::fs::read(&log_path)
+        && content.len() > KEEP_LOG_BYTES
+    {
+        let start = content.len() - KEEP_LOG_BYTES;
+        // Advance to the next newline so we don't keep a partial line at the start
+        let split = content[start..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .map(|p| start + p + 1)
+            .unwrap_or(start);
+        let _ = std::fs::write(&log_path, &content[split..]);
     }
 
-    let (file_writer, guard) = tracing_appender::non_blocking(
-        tracing_appender::rolling::never(log_dir, log_file),
-    );
+    let (file_writer, guard) =
+        tracing_appender::non_blocking(tracing_appender::rolling::never(log_dir, log_file));
 
     tracing_subscriber::registry()
         .with(filter)

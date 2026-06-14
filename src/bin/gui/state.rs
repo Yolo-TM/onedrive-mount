@@ -59,9 +59,10 @@ impl State {
         let (config, load_error) = match crate::config_io::load_result() {
             crate::config_io::LoadResult::Ok(c) => (c, None),
             crate::config_io::LoadResult::Missing => (Default::default(), None),
-            crate::config_io::LoadResult::ParseError(e) => {
-                (Default::default(), Some(format!("Failed to load config.toml: {e}")))
-            }
+            crate::config_io::LoadResult::ParseError(e) => (
+                Default::default(),
+                Some(format!("Failed to load config.toml: {e}")),
+            ),
         };
 
         Self {

@@ -9,7 +9,11 @@ use std::process::Command;
 fn sanitize_flag(value: &str, field: &str) -> String {
     let bad: &[char] = &[';', '&', '|', '`', '$', '>', '<', '\n', '\r', '\0'];
     if value.chars().any(|c| bad.contains(&c)) {
-        tracing::warn!(field, value, "config field contains unsafe characters — using empty string");
+        tracing::warn!(
+            field,
+            value,
+            "config field contains unsafe characters — using empty string"
+        );
         String::new()
     } else {
         value.to_string()
@@ -21,15 +25,39 @@ pub fn mount_command(remote: &RemoteConfig, log: &LogConfig) -> Command {
     cmd.arg("mount")
         .arg(format!("{}:", sanitize_flag(&remote.name, "remote.name")))
         .arg(onedrive_mount::paths::expand_tilde(&remote.mount_point))
-        .arg(format!("--vfs-cache-mode={}", sanitize_flag(&remote.mount.vfs_cache_mode, "mount.vfs_cache_mode")))
-        .arg(format!("--vfs-cache-max-age={}", sanitize_flag(&remote.mount.vfs_cache_max_age, "mount.vfs_cache_max_age")))
-        .arg(format!("--vfs-cache-max-size={}", sanitize_flag(&remote.mount.vfs_cache_max_size, "mount.vfs_cache_max_size")))
-        .arg(format!("--vfs-write-back={}", sanitize_flag(&remote.mount.vfs_write_back, "mount.vfs_write_back")))
+        .arg(format!(
+            "--vfs-cache-mode={}",
+            sanitize_flag(&remote.mount.vfs_cache_mode, "mount.vfs_cache_mode")
+        ))
+        .arg(format!(
+            "--vfs-cache-max-age={}",
+            sanitize_flag(&remote.mount.vfs_cache_max_age, "mount.vfs_cache_max_age")
+        ))
+        .arg(format!(
+            "--vfs-cache-max-size={}",
+            sanitize_flag(&remote.mount.vfs_cache_max_size, "mount.vfs_cache_max_size")
+        ))
+        .arg(format!(
+            "--vfs-write-back={}",
+            sanitize_flag(&remote.mount.vfs_write_back, "mount.vfs_write_back")
+        ))
         .arg(format!("--transfers={}", remote.mount.transfers))
-        .arg(format!("--dir-cache-time={}", sanitize_flag(&remote.mount.dir_cache_time, "mount.dir_cache_time")))
-        .arg(format!("--poll-interval={}", sanitize_flag(&remote.poll_interval, "poll_interval")))
-        .arg(format!("--log-file={}", onedrive_mount::paths::expand_tilde(&log.file).display()))
-        .arg(format!("--log-level={}", sanitize_flag(&log.level, "log.level")));
+        .arg(format!(
+            "--dir-cache-time={}",
+            sanitize_flag(&remote.mount.dir_cache_time, "mount.dir_cache_time")
+        ))
+        .arg(format!(
+            "--poll-interval={}",
+            sanitize_flag(&remote.poll_interval, "poll_interval")
+        ))
+        .arg(format!(
+            "--log-file={}",
+            onedrive_mount::paths::expand_tilde(&log.file).display()
+        ))
+        .arg(format!(
+            "--log-level={}",
+            sanitize_flag(&log.level, "log.level")
+        ));
 
     for flag in &remote.mount.extra_flags {
         // Extra flags are passed as individual argv entries — still sanitize
@@ -59,7 +87,11 @@ pub fn copy_command(src: &str, dst: &str, patterns: &[String]) -> Command {
 /// Exit code is non-zero when differences exist — that's expected, not an error.
 pub fn check_command(remote: &str, local: &str, patterns: &[String]) -> Command {
     let mut cmd = Command::new("rclone");
-    cmd.arg("check").arg(remote).arg(local).arg("--differ").arg("-");
+    cmd.arg("check")
+        .arg(remote)
+        .arg(local)
+        .arg("--differ")
+        .arg("-");
 
     for p in patterns {
         cmd.arg("--include").arg(p);

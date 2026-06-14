@@ -38,7 +38,6 @@ pub enum MountState {
     },
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncRuleStatus {
     pub name: String,
