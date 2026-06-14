@@ -33,5 +33,6 @@ fn parse_invalid_returns_none() {
 
 #[test]
 fn parse_zero() {
-    assert_eq!(parse_interval("0s"), Some(Duration::from_secs(0)));
+    assert_eq!(parse_interval("0s"), None);
+    assert_eq!(parse_interval("0m"), None);
 }
