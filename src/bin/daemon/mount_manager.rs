@@ -13,6 +13,7 @@ use tracing::{error, info, warn};
 
 struct MountEntry {
     child: Child,
+    mount_point: std::path::PathBuf,
     /// The timestamp when this mount process first became healthy (Mounted state).
     /// None while still in the Mounting phase.
     since: Option<DateTime<Utc>>,
@@ -22,6 +23,7 @@ pub struct MountManager {
     mounts: HashMap<String, MountEntry>,
     log: LogConfig,
 }
+
 
 impl MountManager {
     pub fn new(log: LogConfig) -> Self {
@@ -55,8 +57,10 @@ impl MountManager {
             .context("spawning rclone mount")?;
 
         info!(remote = %remote.name, path = %mount_point.display(), "rclone mount started");
-        self.mounts
-            .insert(remote.name.clone(), MountEntry { child, since: None });
+        self.mounts.insert(
+            remote.name.clone(),
+            MountEntry { child, mount_point: mount_point.clone(), since: None },
+        );
 
         Ok(MountState::Mounting)
     }
@@ -70,6 +74,12 @@ impl MountManager {
             warn!(remote = %remote_name, error = %e, "kill failed");
         }
         let _ = entry.child.wait().await;
+
+        // After killing rclone the FUSE endpoint is left in a broken state
+        // ("Transport endpoint is not connected") until explicitly unmounted.
+        // Run fusermount -u to clean it up so the mount point is usable again.
+        let _ = crate::rclone::fusermount_command(&entry.mount_point).status();
+
         info!(remote = %remote_name, "rclone mount stopped");
     }
 
