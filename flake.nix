@@ -60,7 +60,7 @@
 
         package = pkgs.rustPlatform.buildRustPackage {
           pname = "onedrive-mount";
-          version = "0.1.3";
+          version = "0.1.6";
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
