@@ -10,7 +10,7 @@ pub fn show(
     ui: &mut egui::Ui,
     remote: &mut RemoteConfig,
     daemon_status: &Option<DaemonStatus>,
-    available_remotes: &[String],
+    _available_remotes: &[String],
     error: &mut Option<String>,
 ) -> bool {
     let mut changed = false;

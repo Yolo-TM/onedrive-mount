@@ -8,7 +8,7 @@ use onedrive_mount::{
     paths::expand_tilde,
 };
 use std::{path::PathBuf, time::Duration};
-use tracing::{info, warn};
+use tracing::warn;
 
 /// How long a single rclone copy/check invocation may run before we abort it.
 const SYNC_TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes

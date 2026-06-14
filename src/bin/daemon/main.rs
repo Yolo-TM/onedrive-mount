@@ -89,8 +89,25 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
         let _ = std::fs::create_dir_all(parent);
     }
 
+    // If the log file exceeds 10 MB, trim it to the last 5 MB (keeping a clean line boundary).
+    // We use a fixed filename (never-rolling) so the GUI always knows where to read.
+    const MAX_LOG_BYTES: usize = 10 * 1024 * 1024;
+    const KEEP_LOG_BYTES: usize = 5 * 1024 * 1024;
+    if std::fs::metadata(&log_path).map(|m| m.len() as usize).unwrap_or(0) > MAX_LOG_BYTES {
+        if let Ok(content) = std::fs::read(&log_path) {
+            if content.len() > KEEP_LOG_BYTES {
+                let start = content.len() - KEEP_LOG_BYTES;
+                // Advance to the next newline so we don't keep a partial line at the start
+                let split = content[start..].iter().position(|&b| b == b'\n')
+                    .map(|p| start + p + 1)
+                    .unwrap_or(start);
+                let _ = std::fs::write(&log_path, &content[split..]);
+            }
+        }
+    }
+
     let (file_writer, guard) = tracing_appender::non_blocking(
-        tracing_appender::rolling::daily(log_dir, log_file),
+        tracing_appender::rolling::never(log_dir, log_file),
     );
 
     tracing_subscriber::registry()

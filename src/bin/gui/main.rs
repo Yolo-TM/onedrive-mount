@@ -9,16 +9,7 @@ mod views;
 mod widgets;
 
 fn main() -> eframe::Result {
-    use onedrive_mount::{paths::gui_pid_file, pid_lock::PidLock};
-    let pid_lock = match PidLock::acquire(&gui_pid_file()) {
-        Ok(lock) => lock,
-        Err(pid) => {
-            eprintln!("onedrive-mount is already running (pid {pid})");
-            std::process::exit(1);
-        }
-    };
-
-    // Print version if requested
+    // Handle --version before anything else — no PID lock, no Wayland stripping needed
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("onedrive-mount {}", env!("CARGO_PKG_VERSION"));
@@ -33,6 +24,15 @@ fn main() -> eframe::Result {
         std::env::remove_var("WAYLAND_DISPLAY");
         std::env::remove_var("WAYLAND_SOCKET");
     }
+
+    use onedrive_mount::{paths::gui_pid_file, pid_lock::PidLock};
+    let pid_lock = match PidLock::acquire(&gui_pid_file()) {
+        Ok(lock) => lock,
+        Err(pid) => {
+            eprintln!("onedrive-mount is already running (pid {pid})");
+            std::process::exit(1);
+        }
+    };
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

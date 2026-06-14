@@ -6,8 +6,34 @@ on:
       - "v*"
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install GUI runtime deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb-render0-dev \
+            libxkbcommon-dev libgl1-mesa-dev pkg-config
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all-features
+
   # NixOS: dynamically linked, rpath-patched — for NixOS users and `nix run`
   build-nix:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +68,7 @@ jobs:
 
   # glibc dynamic: GUI + daemon linked against system libs — works on Debian, Fedora, Arch, etc.
   build-glibc:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +101,7 @@ jobs:
 
   # musl static: daemon only — no dependencies, runs on any Linux
   build-musl:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +136,9 @@ jobs:
         with:
           merge-multiple: true
           path: dist/
+
+      - name: Generate checksums
+        run: sha256sum dist/* | sed 's|dist/||' > dist/SHA256SUMS
 
       - uses: softprops/action-gh-release@v2
         with:

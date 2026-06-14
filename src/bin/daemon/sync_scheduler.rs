@@ -10,7 +10,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 /// Maximum number of consecutive retries before giving up until the next scheduled interval.
 const MAX_RETRIES: u32 = 3;

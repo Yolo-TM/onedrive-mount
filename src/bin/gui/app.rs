@@ -8,7 +8,6 @@ use onedrive_mount::config::RemoteConfig;
 use eframe::egui;
 use onedrive_mount::status::MountState;
 use std::time::{Duration, Instant};
-use chrono::Utc;
 
 #[derive(PartialEq, Clone)]
 enum Nav {
@@ -79,6 +78,14 @@ impl eframe::App for App {
             self.state.last_status_poll = Instant::now();
             if self.daemon_starting && self.state.daemon_active {
                 self.daemon_starting = false;
+            }
+            // If the service is installed but not running, surface the last journal error
+            if self.state.service_enabled && !self.state.daemon_active && !self.daemon_starting {
+                if let Some(err) = systemd::last_exit_error() {
+                    if self.state.service_error.is_none() {
+                        self.state.service_error = Some(format!("Daemon stopped: {err}"));
+                    }
+                }
             }
         }
         ctx.request_repaint_after(poll_interval);

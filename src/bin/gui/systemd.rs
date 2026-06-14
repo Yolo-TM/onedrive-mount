@@ -94,6 +94,21 @@ pub fn is_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// Returns the last error line from the daemon's journal, if any.
+/// Used to surface crash reasons (e.g. rclone not found) when the service is inactive.
+pub fn last_exit_error() -> Option<String> {
+    let output = Command::new("journalctl")
+        .args(["--user", "-u", "onedrive-mountd.service", "-n", "20", "--no-pager", "-o", "cat"])
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines()
+        .filter(|l| l.contains("error:") || l.contains("Error") || l.contains("not found"))
+        .last()
+        .map(|l| l.trim().to_string())
+}
+
 fn systemctl(args: &[&str]) -> Result<(), String> {
     let mut full_args = vec!["--user"];
     full_args.extend_from_slice(args);

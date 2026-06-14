@@ -53,7 +53,7 @@ pub fn show(ui: &mut egui::Ui, log: &mut LogConfig, cache: &mut LogTailCache) ->
             changed |= labeled_field::show(
                 ui,
                 "Log file",
-                "~/.local/share/rclone/onedrive-mount.log",
+                "~/.local/share/onedrive-mount/daemon.log",
                 &mut log.file,
             );
 

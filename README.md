@@ -38,6 +38,12 @@ Run `nixos-rebuild switch` — it will fail with the correct hash in the error o
 
 This installs both binaries and the `.desktop` entry. The daemon runs as a per-user systemd service — start it from the GUI's **Service** tab or with `systemctl --user enable --now onedrive-mountd`.
 
+> **Note:** If you want the daemon to keep running after logout (e.g. for background sync without an active session), enable lingering for your user:
+>
+> ```sh
+> loginctl enable-linger
+> ```
+
 ### Pre-built binaries (GitHub releases)
 
 Three variants are published per release:
@@ -81,7 +87,7 @@ cp target/release/onedrive-mountd target/release/onedrive-mount ~/.local/bin/
 
 2. Open the GUI (`onedrive-mount`), configure your remotes and sync rules, then click **Save**.
 
-3. Go to the **Service** tab → **Install & enable** to register the systemd user service.
+3. Open the GUI, click **Install service** in the bottom status bar to register the systemd user service.
 
 The daemon starts automatically on login from that point on.
 
@@ -92,8 +98,10 @@ Config lives at `~/.config/onedrive-mount/config.toml`. See [config.example.toml
 ## Running the daemon manually
 
 ```sh
-RUST_LOG=info onedrive-mountd
+onedrive-mountd
 ```
+
+Logs are written to `~/.local/share/onedrive-mount/daemon.log`. The log level can be changed in the GUI's **Logging** tab or directly in `config.toml`.
 
 ```sh
 systemctl --user status onedrive-mountd

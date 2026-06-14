@@ -7,7 +7,7 @@ use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use onedrive_mount::{config::Config, paths::config_file};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use tracing::{info, warn};
+use tracing::warn;
 
 pub enum ConfigEvent {
     /// A valid config was loaded — apply it.
@@ -34,11 +34,16 @@ impl ConfigWatcher {
         // Capture the runtime handle so we can spawn tasks from the notify callback thread,
         // which runs outside the Tokio runtime.
         let handle = tokio::runtime::Handle::current();
+        let watch_path = path.clone();
 
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             let Ok(event) = res else { return };
 
             if !matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                return;
+            }
+
+            if !event.paths.iter().any(|p| p == &watch_path) {
                 return;
             }
 
@@ -53,8 +58,15 @@ impl ConfigWatcher {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 match Config::load(&cfg_path) {
                     Ok(cfg) => {
-                        tracing::debug!("config file changed — sending to daemon");
-                        let _ = sender.send(ConfigEvent::Loaded(cfg)).await;
+                        let errors = cfg.validate();
+                        if errors.is_empty() {
+                            tracing::debug!("config file changed — sending to daemon");
+                            let _ = sender.send(ConfigEvent::Loaded(cfg)).await;
+                        } else {
+                            let msg = errors.join("; ");
+                            warn!(error = %msg, "config validation failed, keeping previous");
+                            let _ = sender.send(ConfigEvent::ParseError(msg)).await;
+                        }
                     }
                     Err(e) => {
                         let msg = e.to_string();

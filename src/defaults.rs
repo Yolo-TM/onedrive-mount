@@ -37,7 +37,7 @@ pub fn extra_flags() -> Vec<String> {
 }
 
 pub fn log_file() -> String {
-    "~/.local/share/rclone/onedrive-mount.log".into()
+    "~/.local/share/onedrive-mount/daemon.log".into()
 }
 
 pub fn log_level() -> String {
