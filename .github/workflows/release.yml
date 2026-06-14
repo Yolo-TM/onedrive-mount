@@ -49,17 +49,18 @@ jobs:
 
       - name: Collect artifacts
         run: |
-          mkdir -p dist pkg/bin pkg/share/applications pkg/share/icons/hicolor/scalable/apps
+          mkdir -p dist pkg/onedrive-mount/bin pkg/onedrive-mount/share/applications pkg/onedrive-mount/share/icons/hicolor/scalable/apps
           # individual binaries
           cp result/bin/onedrive-mount  dist/onedrive-mount-x86_64-linux-nix
           cp result/bin/onedrive-mountd dist/onedrive-mountd-x86_64-linux-nix
           # bundle: binaries + .desktop + icon in one tarball for NixOS fetchTarball installs
-          cp result/bin/onedrive-mount  pkg/bin/onedrive-mount
-          cp result/bin/onedrive-mountd pkg/bin/onedrive-mountd
-          cp assets/onedrive-mount.desktop pkg/share/applications/onedrive-mount.desktop
-          cp assets/icon.svg pkg/share/icons/hicolor/scalable/apps/onedrive-mount.svg
-          cp nix/default.nix pkg/default.nix
-          tar -czf dist/onedrive-mount-x86_64-linux-nix.tar.gz -C pkg .
+          # fetchTarball strips the single top-level directory, so wrap everything in one
+          cp result/bin/onedrive-mount  pkg/onedrive-mount/bin/onedrive-mount
+          cp result/bin/onedrive-mountd pkg/onedrive-mount/bin/onedrive-mountd
+          cp assets/onedrive-mount.desktop pkg/onedrive-mount/share/applications/onedrive-mount.desktop
+          cp assets/icon.svg pkg/onedrive-mount/share/icons/hicolor/scalable/apps/onedrive-mount.svg
+          cp nix/default.nix pkg/onedrive-mount/default.nix
+          tar -czf dist/onedrive-mount-x86_64-linux-nix.tar.gz -C pkg onedrive-mount
 
       - uses: actions/upload-artifact@v4
         with:
