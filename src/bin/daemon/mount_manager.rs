@@ -24,7 +24,6 @@ pub struct MountManager {
     log: LogConfig,
 }
 
-
 impl MountManager {
     pub fn new(log: LogConfig) -> Self {
         Self {
@@ -59,7 +58,11 @@ impl MountManager {
         info!(remote = %remote.name, path = %mount_point.display(), "rclone mount started");
         self.mounts.insert(
             remote.name.clone(),
-            MountEntry { child, mount_point: mount_point.clone(), since: None },
+            MountEntry {
+                child,
+                mount_point: mount_point.clone(),
+                since: None,
+            },
         );
 
         Ok(MountState::Mounting)
