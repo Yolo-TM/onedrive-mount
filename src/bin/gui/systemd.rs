@@ -82,10 +82,10 @@ fn resolve_bin_dir(name: &str) -> Option<std::path::PathBuf> {
     );
     for dir in search.split(':') {
         let candidate = std::path::Path::new(dir).join(name);
-        if let Ok(resolved) = candidate.canonicalize() {
-            if resolved.is_file() {
-                return resolved.parent().map(|p| p.to_path_buf());
-            }
+        if let Ok(resolved) = candidate.canonicalize()
+            && resolved.is_file()
+        {
+            return resolved.parent().map(|p| p.to_path_buf());
         }
     }
     None
@@ -98,10 +98,10 @@ pub fn install() -> Result<(), String> {
     // PATH covers them regardless of what systemd injects at runtime.
     let mut extra_dirs: Vec<std::path::PathBuf> = Vec::new();
     for bin in &["rclone", "fusermount3", "fusermount"] {
-        if let Some(dir) = resolve_bin_dir(bin) {
-            if !extra_dirs.contains(&dir) {
-                extra_dirs.push(dir);
-            }
+        if let Some(dir) = resolve_bin_dir(bin)
+            && !extra_dirs.contains(&dir)
+        {
+            extra_dirs.push(dir);
         }
     }
 
