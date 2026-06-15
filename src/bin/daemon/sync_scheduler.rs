@@ -112,7 +112,13 @@ impl SyncScheduler {
                             // show "Running" forever after a config reload or shutdown.
                             None => {
                                 status_tx.send_modify(|s| {
-                                    set_rule_state(s, &remote_name, &rule.name, SyncState::Idle, None)
+                                    set_rule_state(
+                                        s,
+                                        &remote_name,
+                                        &rule.name,
+                                        SyncState::Idle,
+                                        None,
+                                    )
                                 });
                                 break;
                             }

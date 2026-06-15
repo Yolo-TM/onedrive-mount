@@ -58,7 +58,7 @@
 
         package = pkgs.rustPlatform.buildRustPackage {
           pname = "onedrive-mount";
-          version = "0.1.6";
+          version = "0.2.0";
 
           # Exclude target/ and other non-source dirs so the store hash is
           # stable and doesn't differ between machines with dirty trees.

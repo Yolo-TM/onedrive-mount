@@ -214,23 +214,26 @@ impl eframe::App for App {
             ui.selectable_value(&mut self.nav, Nav::Logging, "Logging");
         });
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
-            match self.nav {
-                Nav::Status => {
-                    status::show(ui, &self.state.config, &self.state.status, self.state.daemon_active);
-                }
-                Nav::Remotes => {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        show_remotes(ui, &mut self.state);
-                    });
-                }
-                Nav::Logging => {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
-                            self.state.config_dirty = true;
-                        }
-                    });
-                }
+        egui::CentralPanel::default().show_inside(ui, |ui| match self.nav {
+            Nav::Status => {
+                status::show(
+                    ui,
+                    &self.state.config,
+                    &self.state.status,
+                    self.state.daemon_active,
+                );
+            }
+            Nav::Remotes => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    show_remotes(ui, &mut self.state);
+                });
+            }
+            Nav::Logging => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
+                        self.state.config_dirty = true;
+                    }
+                });
             }
         });
     }

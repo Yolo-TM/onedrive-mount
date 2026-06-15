@@ -8,7 +8,12 @@ use onedrive_mount::{
 };
 use std::path::PathBuf;
 
-pub fn show(ui: &mut egui::Ui, config: &Config, status: &Option<DaemonStatus>, daemon_active: bool) {
+pub fn show(
+    ui: &mut egui::Ui,
+    config: &Config,
+    status: &Option<DaemonStatus>,
+    daemon_active: bool,
+) {
     if !daemon_active {
         ui.centered_and_justified(|ui| {
             ui.weak("Daemon is not running — start it from the service controls below.");
@@ -185,9 +190,7 @@ fn read_dir_entries(path: &PathBuf) -> Vec<DirEntry> {
         .collect();
 
     // Dirs first, then files, both alphabetical
-    entries.sort_unstable_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name))
-    });
+    entries.sort_unstable_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
 
     entries
 }
