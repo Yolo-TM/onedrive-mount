@@ -8,6 +8,8 @@ pub struct DaemonStatus {
     pub pid: u32,
     pub started_at: Option<DateTime<Utc>>,
     #[serde(default)]
+    pub version: String,
+    #[serde(default)]
     pub remotes: Vec<RemoteStatus>,
     /// Set when the config file was changed but failed to parse.
     /// Cleared when a subsequent valid config is loaded successfully.

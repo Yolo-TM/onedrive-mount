@@ -28,6 +28,24 @@ pub fn show(
         return;
     };
 
+    // Version header
+    ui.horizontal(|ui| {
+        ui.weak(format!("GUI v{}", env!("CARGO_PKG_VERSION")));
+        ui.separator();
+        if status.version.is_empty() {
+            ui.weak("Daemon v?");
+        } else {
+            ui.weak(format!("Daemon v{}", status.version));
+            if status.version != env!("CARGO_PKG_VERSION") {
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    "⚠ version mismatch — reinstall recommended",
+                );
+            }
+        }
+    });
+    ui.add_space(4.0);
+
     if config.remotes.is_empty() {
         ui.centered_and_justified(|ui| {
             ui.weak("No remotes configured. Add one in the Remotes tab.");

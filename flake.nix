@@ -54,6 +54,7 @@
           rustToolchain
           pkg-config
           autoPatchelfHook
+          makeWrapper
         ];
 
         package = pkgs.rustPlatform.buildRustPackage {
@@ -86,6 +87,11 @@
             mkdir -p $out/share/applications
             install -m644 assets/onedrive-mount.desktop \
               $out/share/applications/onedrive-mount.desktop
+
+            # xkbcommon-dl dlopen()s libxkbcommon-x11.so by bare name, bypassing rpath.
+            # Wrap the GUI binary so LD_LIBRARY_PATH is always set on launch.
+            wrapProgram $out/bin/onedrive-mount \
+              --prefix LD_LIBRARY_PATH : "${runtimeLibPath}"
           '';
 
           # autoPatchelfHook rewrites ELF RPATHs using the buildInputs above,

@@ -281,6 +281,7 @@ fn build_initial_status(config: &Config) -> DaemonStatus {
     DaemonStatus {
         pid: std::process::id(),
         started_at: Some(Utc::now()),
+        version: env!("CARGO_PKG_VERSION").to_string(),
         config_error: None,
         remotes: config
             .remotes

@@ -38,6 +38,24 @@ impl MountManager {
             .await
             .context("creating mount point")?;
 
+        // After a crash the FUSE endpoint may still be registered even though
+        // the rclone process is gone — rclone will refuse to mount with
+        // "directory already mounted". Detect this by checking if the mount
+        // point's device ID differs from its parent (i.e. something is mounted
+        // there) without an rclone process we know about, and clean it up.
+        if !self.mounts.contains_key(&remote.name)
+            && is_fuse_mounted(&mount_point).await
+        {
+            warn!(
+                remote = %remote.name,
+                path = %mount_point.display(),
+                "stale FUSE mount detected after crash — running fusermount -u to clean up"
+            );
+            let _ = crate::rclone::fusermount_command(&mount_point).status();
+            // Give the kernel a moment to release the endpoint
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+
         // Warn if the mount point already contains files — rclone will mount on top of them,
         // making the existing content temporarily inaccessible.
         if let Ok(mut entries) = tokio::fs::read_dir(&mount_point).await

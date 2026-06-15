@@ -1,13 +1,7 @@
 { pkgs ? import <nixpkgs> {} }:
 
-pkgs.stdenv.mkDerivation {
-  pname = "onedrive-mount";
-  version = "0.2.0";
-  src = ./.;
-
-  nativeBuildInputs = [ pkgs.autoPatchelfHook ];
-
-  buildInputs = with pkgs; [
+let
+  runtimeLibs = with pkgs; [
     stdenv.cc.cc.lib
     libx11
     libxcursor
@@ -18,12 +12,30 @@ pkgs.stdenv.mkDerivation {
     libxkbcommon
   ];
 
-  phases = [ "installPhase" ];
-  installPhase = ''
-    mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
-    install -m755 $src/bin/onedrive-mount  $out/bin/
-    install -m755 $src/bin/onedrive-mountd $out/bin/
-    install -m644 $src/share/applications/onedrive-mount.desktop  $out/share/applications/
-    install -m644 $src/share/icons/hicolor/scalable/apps/onedrive-mount.svg $out/share/icons/hicolor/scalable/apps/
-  '';
-}
+  runtimeLibPath = pkgs.lib.makeLibraryPath runtimeLibs;
+
+  pkg = pkgs.stdenv.mkDerivation {
+    pname = "onedrive-mount";
+    version = "0.2.0";
+    src = ./.;
+
+    nativeBuildInputs = [ pkgs.autoPatchelfHook pkgs.makeWrapper ];
+    buildInputs = runtimeLibs;
+
+    phases = [ "installPhase" ];
+    installPhase = ''
+      mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
+
+      install -m755 $src/bin/onedrive-mountd $out/bin/onedrive-mountd
+      install -m644 $src/share/applications/onedrive-mount.desktop $out/share/applications/
+      install -m644 $src/share/icons/hicolor/scalable/apps/onedrive-mount.svg \
+        $out/share/icons/hicolor/scalable/apps/
+
+      # xkbcommon-dl dlopen()s libxkbcommon-x11.so by bare name at runtime,
+      # bypassing rpath. Wrap the GUI binary to set LD_LIBRARY_PATH so it finds
+      # it regardless of how the binary is launched (terminal, .desktop, etc).
+      makeWrapper $src/bin/onedrive-mount $out/bin/onedrive-mount \
+        --prefix LD_LIBRARY_PATH : "${runtimeLibPath}"
+    '';
+  };
+in pkg
