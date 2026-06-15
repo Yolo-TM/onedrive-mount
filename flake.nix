@@ -48,7 +48,7 @@
 
         runtimeLibPath = pkgs.lib.makeLibraryPath runtimeLibs;
 
-        buildInputs = runtimeLibs;
+        buildInputs = runtimeLibs ++ [ pkgs.stdenv.cc.cc.lib ];
 
         nativeBuildInputs = with pkgs; [
           rustToolchain
