@@ -7,6 +7,7 @@ fn sample_status() -> DaemonStatus {
     DaemonStatus {
         pid: 12345,
         started_at: Some(chrono::Utc::now()),
+        version: "0.2.0".into(),
         config_error: None,
         remotes: vec![RemoteStatus {
             name: "onedrive".into(),
