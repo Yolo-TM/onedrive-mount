@@ -43,9 +43,7 @@ impl MountManager {
         // "directory already mounted". Detect this by checking if the mount
         // point's device ID differs from its parent (i.e. something is mounted
         // there) without an rclone process we know about, and clean it up.
-        if !self.mounts.contains_key(&remote.name)
-            && is_fuse_mounted(&mount_point).await
-        {
+        if !self.mounts.contains_key(&remote.name) && is_fuse_mounted(&mount_point).await {
             warn!(
                 remote = %remote.name,
                 path = %mount_point.display(),
