@@ -108,7 +108,14 @@ impl SyncScheduler {
                                     )
                                 });
                             }
-                            None => break, // cancelled during retry sleep
+                            // Cancelled mid-sync: reset to Idle so the GUI doesn't
+                            // show "Running" forever after a config reload or shutdown.
+                            None => {
+                                status_tx.send_modify(|s| {
+                                    set_rule_state(s, &remote_name, &rule.name, SyncState::Idle, None)
+                                });
+                                break;
+                            }
                         }
                     }
                 });

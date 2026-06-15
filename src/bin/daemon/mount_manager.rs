@@ -99,7 +99,8 @@ impl MountManager {
     pub async fn health_check(&mut self, remote: &RemoteConfig) -> MountState {
         let mount_point = expand_tilde(&remote.mount_point);
 
-        // Check if the child process has already exited
+        // Check process liveness first via try_wait — this is cheap and doesn't
+        // touch the FUSE layer, avoiding spurious Attr calls in the rclone log.
         if let Some(entry) = self.mounts.get_mut(&remote.name) {
             match entry.child.try_wait() {
                 Ok(Some(status)) => {
@@ -107,7 +108,14 @@ impl MountManager {
                     self.mounts.remove(&remote.name);
                     return self.remount(remote).await;
                 }
-                Ok(None) => {} // still running
+                Ok(None) => {
+                    // Process still running — if already confirmed mounted, trust it.
+                    // Only stat the mount point while still in Mounting phase to detect
+                    // when FUSE becomes ready.
+                    if let Some(since) = entry.since {
+                        return MountState::Mounted { since };
+                    }
+                }
                 Err(e) => {
                     warn!(remote = %remote.name, error = %e, "could not check mount process status");
                 }

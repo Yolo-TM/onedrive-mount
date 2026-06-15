@@ -10,7 +10,22 @@ fn unit_path() -> PathBuf {
         .join("systemd/user/onedrive-mountd.service")
 }
 
-fn unit_content(binary_path: &std::path::Path) -> String {
+fn unit_content(binary_path: &std::path::Path, extra_path_dirs: &[std::path::PathBuf]) -> String {
+    // Systemd user services start with a minimal PATH that does not include
+    // the user's Nix profile or any NixOS environment.systemPackages entries.
+    // We resolve rclone and fusermount3 at install time and bake their parent
+    // directories into the unit so the daemon can exec them by bare name.
+    let base_path = "/run/current-system/sw/bin:/usr/local/bin:/usr/bin:/bin";
+    let path = if extra_path_dirs.is_empty() {
+        base_path.to_string()
+    } else {
+        let extra: Vec<String> = extra_path_dirs
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+        format!("{}:{}", extra.join(":"), base_path)
+    };
+
     format!(
         "[Unit]\n\
          Description=OneDrive Mount Daemon\n\
@@ -20,13 +35,15 @@ fn unit_content(binary_path: &std::path::Path) -> String {
          \n\
          [Service]\n\
          ExecStart={}\n\
+         Environment=PATH={}\n\
          Restart=on-failure\n\
          RestartSec=10s\n\
          Type=exec\n\
          \n\
          [Install]\n\
          WantedBy=default.target\n",
-        binary_path.display()
+        binary_path.display(),
+        path,
     )
 }
 
@@ -52,15 +69,48 @@ fn daemon_binary_path() -> Result<PathBuf, String> {
     Ok(daemon)
 }
 
+/// Resolves a binary by searching PATH plus NixOS well-known locations,
+/// canonicalizing symlinks so we get the real Nix store bin dir rather than
+/// a profile symlink that may not be visible inside the systemd unit's PATH.
+fn resolve_bin_dir(name: &str) -> Option<std::path::PathBuf> {
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    // Always append NixOS system and user profile dirs so this works when the
+    // GUI is launched from a .desktop file with a minimal desktop-session PATH.
+    let search = format!(
+        "{}:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin",
+        path_var
+    );
+    for dir in search.split(':') {
+        let candidate = std::path::Path::new(dir).join(name);
+        if let Ok(resolved) = candidate.canonicalize() {
+            if resolved.is_file() {
+                return resolved.parent().map(|p| p.to_path_buf());
+            }
+        }
+    }
+    None
+}
+
 pub fn install() -> Result<(), String> {
     let binary = daemon_binary_path()?;
+
+    // Collect the Nix store bin dirs for rclone and fusermount so the unit's
+    // PATH covers them regardless of what systemd injects at runtime.
+    let mut extra_dirs: Vec<std::path::PathBuf> = Vec::new();
+    for bin in &["rclone", "fusermount3", "fusermount"] {
+        if let Some(dir) = resolve_bin_dir(bin) {
+            if !extra_dirs.contains(&dir) {
+                extra_dirs.push(dir);
+            }
+        }
+    }
 
     let path = unit_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
 
-    fs::write(&path, unit_content(&binary)).map_err(|e| e.to_string())?;
+    fs::write(&path, unit_content(&binary, &extra_dirs)).map_err(|e| e.to_string())?;
     systemctl(&["daemon-reload"])?;
     systemctl(&["enable", "--now", "onedrive-mountd.service"])
 }

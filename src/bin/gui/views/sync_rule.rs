@@ -5,10 +5,12 @@ use eframe::egui;
 use onedrive_mount::{config::SyncRule, conflict::ConflictStrategy};
 
 /// Returns `true` when any field changed.
-pub fn show(ui: &mut egui::Ui, rule: &mut SyncRule) -> bool {
+/// `id` must be a stable value (e.g. the rule's index) — NOT the rule name,
+/// which changes while the user types and would reset widget state mid-edit.
+pub fn show(ui: &mut egui::Ui, rule: &mut SyncRule, id: usize) -> bool {
     let mut changed = false;
 
-    egui::Grid::new(&rule.name)
+    egui::Grid::new(("sync_rule_grid", id))
         .num_columns(2)
         .spacing([16.0, 6.0])
         .show(ui, |ui| {

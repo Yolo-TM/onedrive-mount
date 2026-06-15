@@ -13,7 +13,6 @@
       nixosModule = { config, lib, pkgs, ... }:
         let
           cfg = config.services.onedrive-mount;
-          # Pull the package from this flake for the host system
           pkg = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
         in {
           options.services.onedrive-mount = {
@@ -21,12 +20,11 @@
           };
 
           config = lib.mkIf cfg.enable {
-            # Make both binaries available system-wide
-            environment.systemPackages = [ pkg ];
-
-            # The daemon runs as a systemd user service — managed per-user via the GUI.
-            # Installing the package puts the binaries in PATH so the GUI's
-            # "Install service" button can write the unit and start it.
+            environment.systemPackages = [
+              pkg
+              pkgs.rclone
+              pkgs.fuse3
+            ];
           };
         };
 
@@ -50,63 +48,85 @@
 
         runtimeLibPath = pkgs.lib.makeLibraryPath runtimeLibs;
 
-        buildInputs = runtimeLibs ++ (with pkgs; [ rclone ]);
+        buildInputs = runtimeLibs;
 
         nativeBuildInputs = with pkgs; [
           rustToolchain
           pkg-config
-          patchelf
+          autoPatchelfHook
         ];
 
         package = pkgs.rustPlatform.buildRustPackage {
           pname = "onedrive-mount";
           version = "0.1.6";
-          src = ./.;
+
+          # Exclude target/ and other non-source dirs so the store hash is
+          # stable and doesn't differ between machines with dirty trees.
+          src = pkgs.lib.cleanSourceWith {
+            src = ./.;
+            filter = path: type:
+              let rel = pkgs.lib.removePrefix (toString ./. + "/") path;
+              in !(pkgs.lib.hasPrefix "target/" rel)
+              && !(pkgs.lib.hasPrefix ".git/" rel);
+          };
+
           cargoLock.lockFile = ./Cargo.lock;
 
           inherit buildInputs nativeBuildInputs;
 
-          buildPhase = ''
-            cargo build --release --bin onedrive-mountd --features daemon
-            cargo build --release --bin onedrive-mount  --features gui
-          '';
+          # Build both binaries; features joined as a single string is what
+          # rustPlatform.buildRustPackage expects for CARGO_BUILD_FEATURES.
+          cargoBuildFlags = [ "--bins" "--features" "daemon,gui" ];
 
-          installPhase = ''
-            mkdir -p $out/bin
-            install -m755 target/release/onedrive-mountd $out/bin/
-            install -m755 target/release/onedrive-mount  $out/bin/
-
+          postInstall = ''
             mkdir -p $out/share/icons/hicolor/scalable/apps
-            install -m644 assets/icon.svg $out/share/icons/hicolor/scalable/apps/onedrive-mount.svg
+            install -m644 assets/icon.svg \
+              $out/share/icons/hicolor/scalable/apps/onedrive-mount.svg
 
             mkdir -p $out/share/applications
-            install -m644 assets/onedrive-mount.desktop $out/share/applications/onedrive-mount.desktop
+            install -m644 assets/onedrive-mount.desktop \
+              $out/share/applications/onedrive-mount.desktop
           '';
 
-          # Patch ELF rpath so the GUI binary finds its libs without LD_LIBRARY_PATH
-          postFixup = ''
-            patchelf --set-rpath "${runtimeLibPath}" $out/bin/onedrive-mount
-          '';
+          # autoPatchelfHook rewrites ELF RPATHs using the buildInputs above,
+          # producing store-path rpaths that are valid on any NixOS machine.
         };
+
+        # Wrapper script that sets LD_LIBRARY_PATH for the GUI binary.
+        # Required on non-NixOS hosts (nix-on-droid, foreign Linux with Nix)
+        # where the dynamic linker won't find Mesa/X11 via rpath alone.
+        guiWrapper = pkgs.writeShellScriptBin "onedrive-mount" ''
+          export LD_LIBRARY_PATH="${runtimeLibPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          exec ${package}/bin/onedrive-mount "$@"
+        '';
 
       in {
-        packages.default = package;
-
-        # `nix run .#gui` / `nix run .#daemon`
-        apps.gui = {
-          type = "app";
-          program = "${pkgs.writeShellScript "onedrive-mount" ''
-            export LD_LIBRARY_PATH="${runtimeLibPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-            exec ${package}/bin/onedrive-mount "$@"
-          ''}";
+        packages = {
+          default = package;
+          # Variant with the LD_LIBRARY_PATH wrapper bundled — useful on non-NixOS
+          wrapped = pkgs.symlinkJoin {
+            name = "onedrive-mount-wrapped";
+            paths = [ guiWrapper package ];
+          };
         };
-        apps.daemon = {
-          type = "app";
-          program = "${package}/bin/onedrive-mountd";
-        };
-        apps.default = self.apps.${system}.gui;
 
-        # `nix develop` — drops into a shell with all build + runtime deps available
+        apps = {
+          gui = {
+            type = "app";
+            program = "${guiWrapper}/bin/onedrive-mount";
+          };
+          daemon = {
+            type = "app";
+            program = "${package}/bin/onedrive-mountd";
+          };
+          # default app defined inline — avoids referencing self.apps.${system}
+          # which breaks pure flake evaluation
+          default = {
+            type = "app";
+            program = "${guiWrapper}/bin/onedrive-mount";
+          };
+        };
+
         devShells.default = pkgs.mkShell {
           inherit buildInputs nativeBuildInputs;
           LD_LIBRARY_PATH = runtimeLibPath;
@@ -117,7 +137,6 @@
           '';
         };
       }) // {
-        # Expose the NixOS module at the top level (system-independent)
         nixosModules.default = nixosModule;
         nixosModule = nixosModule;
       };

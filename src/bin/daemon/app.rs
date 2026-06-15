@@ -37,8 +37,10 @@ pub async fn run(config: Config) -> Result<()> {
 
     info!("daemon running");
 
-    // Health check interval — short enough to detect a crashed mount within a few seconds
-    let mut health_tick = tokio::time::interval(Duration::from_secs(3));
+    // Health check interval — checks if the rclone process is still alive.
+    // We avoid statting the mount point on every tick (which triggers FUSE Attr calls
+    // and fills the log at DEBUG level). Process liveness is checked cheaply via try_wait.
+    let mut health_tick = tokio::time::interval(Duration::from_secs(15));
     health_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let mut sync_now_sig = crate::signal::sync_now_listener();

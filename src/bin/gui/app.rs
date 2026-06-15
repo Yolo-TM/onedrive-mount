@@ -6,7 +6,7 @@ use crate::{
     rclone_query,
     state::State,
     status_reader, systemd,
-    views::{log_config, remote, service, wizard},
+    views::{log_config, remote, service, status, wizard},
 };
 use eframe::egui;
 use onedrive_mount::config::RemoteConfig;
@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 #[derive(PartialEq, Clone)]
 enum Nav {
+    Status,
     Remotes,
     Logging,
 }
@@ -37,7 +38,7 @@ impl App {
     ) -> Self {
         Self {
             state: State::new(),
-            nav: Nav::Remotes,
+            nav: Nav::Status,
             did_startup: false,
             daemon_starting: false,
             _pid_lock: pid_lock,
@@ -208,19 +209,29 @@ impl eframe::App for App {
             ui.heading("onedrive-mount");
             ui.separator();
 
+            ui.selectable_value(&mut self.nav, Nav::Status, "Status");
             ui.selectable_value(&mut self.nav, Nav::Remotes, "Remotes");
             ui.selectable_value(&mut self.nav, Nav::Logging, "Logging");
         });
 
         egui::CentralPanel::default().show_inside(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| match self.nav {
-                Nav::Remotes => show_remotes(ui, &mut self.state),
-                Nav::Logging => {
-                    if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
-                        self.state.config_dirty = true;
-                    }
+            match self.nav {
+                Nav::Status => {
+                    status::show(ui, &self.state.config, &self.state.status, self.state.daemon_active);
                 }
-            });
+                Nav::Remotes => {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        show_remotes(ui, &mut self.state);
+                    });
+                }
+                Nav::Logging => {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
+                            self.state.config_dirty = true;
+                        }
+                    });
+                }
+            }
         });
     }
 }

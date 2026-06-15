@@ -115,24 +115,28 @@ pub fn show(
                     );
                 }
 
-                ui.collapsing(rule.name.clone(), |ui| {
-                    changed |= crate::views::sync_rule::show(ui, rule);
+                // Use a stable egui ID (index) for the collapsing header so that
+                // renaming the rule doesn't collapse it or reset widget state mid-edit.
+                egui::CollapsingHeader::new(&rule.name)
+                    .id_salt(("rule_header", i))
+                    .show(ui, |ui| {
+                        changed |= crate::views::sync_rule::show(ui, rule, i);
 
-                    ui.horizontal(|ui| {
-                        if ui.button("Remove rule").clicked() {
-                            rule_to_remove = Some(i);
-                        }
+                        ui.horizontal(|ui| {
+                            if ui.button("Remove rule").clicked() {
+                                rule_to_remove = Some(i);
+                            }
 
-                        // Sync Now — only available when the daemon is running
-                        if let Some(pid) = daemon_pid
-                            && ui.button("⟳ Sync now")
-                                .on_hover_text("Trigger an immediate sync for all enabled rules across all remotes")
-                                .clicked()
-                        {
-                            sync_now_error = crate::rclone_query::sync_now(pid).err();
-                        }
+                            // Sync Now — only available when the daemon is running
+                            if let Some(pid) = daemon_pid
+                                && ui.button("⟳ Sync now")
+                                    .on_hover_text("Trigger an immediate sync for all enabled rules across all remotes")
+                                    .clicked()
+                            {
+                                sync_now_error = crate::rclone_query::sync_now(pid).err();
+                            }
+                        });
                     });
-                });
             });
         });
     }
