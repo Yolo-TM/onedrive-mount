@@ -27,14 +27,16 @@ let
       mkdir -p $out/bin $out/share/applications $out/share/icons/hicolor/scalable/apps
 
       install -m755 $src/bin/onedrive-mountd $out/bin/onedrive-mountd
+      install -m755 $src/bin/onedrive-mount  $out/bin/onedrive-mount
       install -m644 $src/share/applications/onedrive-mount.desktop $out/share/applications/
       install -m644 $src/share/icons/hicolor/scalable/apps/onedrive-mount.svg \
         $out/share/icons/hicolor/scalable/apps/
 
       # xkbcommon-dl dlopen()s libxkbcommon-x11.so by bare name at runtime,
-      # bypassing rpath. Wrap the GUI binary to set LD_LIBRARY_PATH so it finds
-      # it regardless of how the binary is launched (terminal, .desktop, etc).
-      makeWrapper $src/bin/onedrive-mount $out/bin/onedrive-mount \
+      # bypassing rpath. wrapProgram moves $out/bin/onedrive-mount to
+      # $out/bin/.onedrive-mount-wrapped and replaces it with a shell script
+      # that sets LD_LIBRARY_PATH then exec's the real binary in $out.
+      wrapProgram $out/bin/onedrive-mount \
         --prefix LD_LIBRARY_PATH : "${runtimeLibPath}"
     '';
   };
