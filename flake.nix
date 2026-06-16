@@ -9,7 +9,7 @@
 
   outputs = { self, nixpkgs, rust-overlay, flake-utils }:
     let
-      # NixOS module — add to any machine's imports
+      # NixOS module — add to any machine's imports via flake
       nixosModule = { config, lib, pkgs, ... }:
         let
           cfg = config.services.onedrive-mount;
@@ -25,6 +25,9 @@
               pkgs.rclone
               pkgs.fuse3
             ];
+
+            # Allow unprivileged users to mount FUSE filesystems (required for rclone mount)
+            programs.fuse.userConfigAllow = true;
           };
         };
 

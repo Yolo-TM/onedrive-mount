@@ -19,26 +19,68 @@ Communication is file-based: the GUI writes [`~/.config/onedrive-mount/config.to
 
 ## Install
 
-### NixOS
+### NixOS (classic, no flake)
 
-Add to your `configuration.nix`:
+If your system uses a plain `configuration.nix`, add this to it:
 
 ```nix
-environment.systemPackages = [
-  pkgs.rclone
-  pkgs.fuse3
-  (import (pkgs.fetchTarball {
-    url = "https://github.com/Yolo-TM/onedrive-mount/releases/latest/download/onedrive-mount-x86_64-linux-nix.tar.gz";
-    sha256 = lib.fakeHash;
-  }) { inherit pkgs; })
-];
+# /etc/nixos/configuration.nix
+{ config, pkgs, lib, ... }:
+let
+  onedrive-mount = builtins.getFlake "github:Yolo-TM/onedrive-mount/v0.2.0";
+in {
+  imports = [ onedrive-mount.nixosModules.default ];
+  services.onedrive-mount.enable = true;
+  # ... rest of your config
+}
 ```
 
-Run `nixos-rebuild switch` — it will fail with the correct hash in the error output. Replace `lib.fakeHash` with that hash, then run `nixos-rebuild switch` again.
+Then rebuild as normal — no `--flake` flag needed:
 
-This installs both binaries and the `.desktop` entry. The daemon runs as a per-user systemd service — start it from the GUI's **Service** tab or with `systemctl --user enable --now onedrive-mountd`.
+```sh
+sudo nixos-rebuild switch
+```
 
-> **Note:** If you want the daemon to keep running after logout (e.g. for background sync without an active session), enable lingering for your user:
+To update to a new release, bump the version tag in the `builtins.getFlake` URL and run `nixos-rebuild switch` again.
+
+### NixOS (flake-based system)
+
+Add this flake as an input in your `/etc/nixos/flake.nix`:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    onedrive-mount.url = "github:Yolo-TM/onedrive-mount/v0.2.0";
+  };
+
+  outputs = { nixpkgs, onedrive-mount, ... }: {
+    nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
+      modules = [
+        ./configuration.nix
+        onedrive-mount.nixosModules.default
+        { services.onedrive-mount.enable = true; }
+      ];
+    };
+  };
+}
+```
+
+```sh
+sudo nixos-rebuild switch --flake /etc/nixos#your-hostname
+```
+
+To update: bump the version tag in the input URL, or run `nix flake update onedrive-mount` to pull latest, then rebuild.
+
+---
+
+Both methods install the binaries, the `.desktop` entry, `rclone`, `fuse3`, and enable unprivileged FUSE mounts. The daemon runs as a per-user systemd service — start it from the GUI's **Service** tab or with:
+
+```sh
+systemctl --user enable --now onedrive-mountd
+```
+
+> **Note:** To keep the daemon running after logout (e.g. for background sync without an active session):
 >
 > ```sh
 > loginctl enable-linger
@@ -46,14 +88,12 @@ This installs both binaries and the `.desktop` entry. The daemon runs as a per-u
 
 ### Pre-built binaries (GitHub releases)
 
-Three variants are published per release:
-
 | Artifact | Links against | Use when |
 | --- | --- | --- |
 | `onedrive-mount-x86_64-linux` | glibc + system X11/GL | Debian, Fedora, Arch, etc. |
 | `onedrive-mountd-x86_64-linux` | glibc | same, daemon only |
 | `onedrive-mountd-x86_64-linux-musl` | nothing (fully static) | any Linux, no GUI |
-| `onedrive-mount-x86_64-linux-nix` | Nix store (rpath-patched) | NixOS without flake module |
+| `onedrive-mount-x86_64-linux-nix` | Nix store (rpath-patched) | NixOS, manual install without flake |
 | `onedrive-mountd-x86_64-linux-nix` | Nix store (rpath-patched) | same, daemon only |
 
 ```sh
