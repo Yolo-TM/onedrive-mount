@@ -27,7 +27,7 @@
             ];
 
             # Allow unprivileged users to mount FUSE filesystems (required for rclone mount)
-            programs.fuse.userConfigAllow = true;
+            programs.fuse.userAllowOther = true;
           };
         };
 
