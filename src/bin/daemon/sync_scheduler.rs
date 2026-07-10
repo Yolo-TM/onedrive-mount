@@ -80,7 +80,8 @@ impl SyncScheduler {
                         // Skip sync if rule is blocked on unresolved conflicts
                         let is_blocked = {
                             let s = status_tx.borrow();
-                            s.remotes.iter()
+                            s.remotes
+                                .iter()
                                 .find(|r| r.name == remote_name)
                                 .and_then(|r| r.sync_rules.iter().find(|sr| sr.name == rule.name))
                                 .map(|sr| sr.state.is_blocked())
@@ -138,8 +139,12 @@ impl SyncScheduler {
                                         SyncState::Succeeded,
                                         Some(outcome.at),
                                     );
-                                    if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == remote_name)
-                                        && let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule.name)
+                                    if let Some(remote) =
+                                        s.remotes.iter_mut().find(|r| r.name == remote_name)
+                                        && let Some(rule) = remote
+                                            .sync_rules
+                                            .iter_mut()
+                                            .find(|r| r.name == rule.name)
                                     {
                                         rule.files_transferred = Some(outcome.files_transferred);
                                         rule.bytes_transferred = Some(outcome.bytes_transferred);

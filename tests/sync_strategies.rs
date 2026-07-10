@@ -41,7 +41,11 @@ fn rclone_sync(src: &str, dst: &str, patterns: &[&str]) -> Command {
 #[allow(clippy::suspicious_command_arg_space)]
 fn rclone_check(remote: &str, local: &str, patterns: &[&str]) -> Command {
     let mut cmd = Command::new("rclone");
-    cmd.arg("check").arg(remote).arg(local).arg("--differ").arg("-");
+    cmd.arg("check")
+        .arg(remote)
+        .arg(local)
+        .arg("--differ")
+        .arg("-");
     add_filters(&mut cmd, patterns);
     cmd
 }
@@ -85,9 +89,7 @@ fn exec_bidirectional(local: &std::path::Path, remote: &std::path::Path) {
     let patterns = &["*"];
 
     // 1. Check for conflicts
-    let output = rclone_check(remote_s, local_s, patterns)
-        .output()
-        .unwrap();
+    let output = rclone_check(remote_s, local_s, patterns).output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // 2. Rename conflicting local files
@@ -96,10 +98,21 @@ fn exec_bidirectional(local: &std::path::Path, remote: &std::path::Path) {
         if !local_path.exists() {
             continue;
         }
-        let stem = local_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
-        let ext = local_path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+        let stem = local_path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let ext = local_path
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
         let conflict_name = format!("{}.conflict-test{}", stem, ext);
-        fs::rename(&local_path, local_path.parent().unwrap().join(conflict_name)).unwrap();
+        fs::rename(
+            &local_path,
+            local_path.parent().unwrap().join(conflict_name),
+        )
+        .unwrap();
     }
 
     // 3. Push local → remote (exclude conflict files)
@@ -197,7 +210,10 @@ fn bidirectional_conflict_keeps_both_locally() {
 
     // Local version should be renamed to conflict file
     let files = list_files(local.path());
-    let conflict_file = files.iter().find(|f| f.contains(".conflict-")).expect("conflict file should exist");
+    let conflict_file = files
+        .iter()
+        .find(|f| f.contains(".conflict-"))
+        .expect("conflict file should exist");
     let conflict_content = read_file(local.path(), conflict_file);
     assert_eq!(conflict_content, "local version");
 }
@@ -286,7 +302,10 @@ fn mirror_down_deletes_local_only_files() {
 
     exec_strategy(SyncStrategy::MirrorDown, local.path(), remote.path());
 
-    assert!(!file_exists(local.path(), "local_only.txt"), "local-only file should be deleted");
+    assert!(
+        !file_exists(local.path(), "local_only.txt"),
+        "local-only file should be deleted"
+    );
     assert!(file_exists(local.path(), "remote.txt"));
 }
 
@@ -325,7 +344,10 @@ fn mirror_up_deletes_remote_only_files() {
 
     exec_strategy(SyncStrategy::MirrorUp, local.path(), remote.path());
 
-    assert!(!file_exists(remote.path(), "remote_only.txt"), "remote-only file should be deleted");
+    assert!(
+        !file_exists(remote.path(), "remote_only.txt"),
+        "remote-only file should be deleted"
+    );
     assert!(file_exists(remote.path(), "local.txt"));
 }
 

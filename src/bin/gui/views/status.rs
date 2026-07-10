@@ -124,9 +124,10 @@ fn show_remote(
                     SyncState::Failed { error, .. } => {
                         (egui::Color32::RED, format!("Failed: {error}"))
                     }
-                    SyncState::BlockedOnConflicts { .. } => {
-                        (egui::Color32::from_rgb(255, 165, 0), format!("⚠ {} conflict(s)", rule.conflicts.len()))
-                    }
+                    SyncState::BlockedOnConflicts { .. } => (
+                        egui::Color32::from_rgb(255, 165, 0),
+                        format!("⚠ {} conflict(s)", rule.conflicts.len()),
+                    ),
                 };
                 ui.colored_label(color, "●");
                 ui.label(&rule.name);

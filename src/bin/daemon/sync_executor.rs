@@ -57,7 +57,11 @@ impl TransferStats {
     }
 }
 
-async fn run_inner(local: &std::path::Path, remote: &str, rule: &SyncRule) -> Result<TransferStats> {
+async fn run_inner(
+    local: &std::path::Path,
+    remote: &str,
+    rule: &SyncRule,
+) -> Result<TransferStats> {
     let local_str = local.to_string_lossy();
     let mut stats = TransferStats::default();
 
@@ -68,17 +72,38 @@ async fn run_inner(local: &std::path::Path, remote: &str, rule: &SyncRule) -> Re
             // 2. Push local → remote (exclude .conflict-* files, they stay local only)
             stats.add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::Normal, true).await?);
             // 3. Pull remote → local (remote version overwrites the renamed-away local)
-            stats.add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Normal, false).await?);
+            stats
+                .add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Normal, false).await?);
         }
         SyncStrategy::NewestWins => {
             // 1. Push local-only new files that don't exist on remote
-            stats.add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::IgnoreExisting, false).await?);
+            stats.add(
+                &run_copy(
+                    &local_str,
+                    remote,
+                    &rule.patterns,
+                    CopyMode::IgnoreExisting,
+                    false,
+                )
+                .await?,
+            );
             // 2. Pull remote-only new files that don't exist locally
-            stats.add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::IgnoreExisting, false).await?);
+            stats.add(
+                &run_copy(
+                    remote,
+                    &local_str,
+                    &rule.patterns,
+                    CopyMode::IgnoreExisting,
+                    false,
+                )
+                .await?,
+            );
             // 3. Push local files where local is newer
-            stats.add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::Update, false).await?);
+            stats
+                .add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::Update, false).await?);
             // 4. Pull remote files where remote is newer
-            stats.add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Update, false).await?);
+            stats
+                .add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Update, false).await?);
         }
         SyncStrategy::MirrorDown => {
             tracing::info!(rule = %rule.name, "mirror_down: discarding local changes, syncing remote to local");
@@ -151,14 +176,8 @@ fn parse_stats(stderr: &[u8]) -> TransferStats {
         // Parse as generic JSON value
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
             if let Some(stats) = v.get("stats") {
-                let files = stats
-                    .get("transfers")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
-                let bytes = stats
-                    .get("bytes")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
+                let files = stats.get("transfers").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let bytes = stats.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0);
                 return TransferStats { files, bytes };
             }
         }

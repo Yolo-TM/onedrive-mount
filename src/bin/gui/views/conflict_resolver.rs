@@ -80,7 +80,10 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
     // Header
     ui.horizontal(|ui| {
         ui.strong(&entry.file);
-        ui.weak(format!("(rule: {}, remote: {})", conflict.rule, conflict.remote));
+        ui.weak(format!(
+            "(rule: {}, remote: {})",
+            conflict.rule, conflict.remote
+        ));
     });
 
     ui.add_space(2.0);
@@ -109,16 +112,8 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
         ui.end_row();
 
         ui.label("Path");
-        ui.label(
-            egui::RichText::new(&entry.local_path)
-                .small()
-                .monospace(),
-        );
-        ui.label(
-            egui::RichText::new(&entry.remote_path)
-                .small()
-                .monospace(),
-        );
+        ui.label(egui::RichText::new(&entry.local_path).small().monospace());
+        ui.label(egui::RichText::new(&entry.remote_path).small().monospace());
         ui.end_row();
     });
 
@@ -225,11 +220,7 @@ fn count_rules(conflicts: &[PendingConflict]) -> usize {
     seen.len()
 }
 
-fn submit_all(
-    conflicts: &[PendingConflict],
-    action: ResolutionAction,
-    error: &mut Option<String>,
-) {
+fn submit_all(conflicts: &[PendingConflict], action: ResolutionAction, error: &mut Option<String>) {
     let resolutions: Vec<Resolution> = conflicts
         .iter()
         .map(|c| Resolution {
@@ -244,11 +235,7 @@ fn submit_all(
     write_resolutions(resolutions, error);
 }
 
-fn submit_one(
-    conflict: &PendingConflict,
-    action: ResolutionAction,
-    error: &mut Option<String>,
-) {
+fn submit_one(conflict: &PendingConflict, action: ResolutionAction, error: &mut Option<String>) {
     let resolution = Resolution {
         remote: conflict.remote.clone(),
         rule: conflict.rule.clone(),

@@ -40,7 +40,11 @@ impl App {
     ) -> Self {
         Self {
             state: State::new(),
-            nav: if resolve_conflicts { Nav::Conflicts } else { Nav::Status },
+            nav: if resolve_conflicts {
+                Nav::Conflicts
+            } else {
+                Nav::Status
+            },
             did_startup: false,
             daemon_starting: false,
             _pid_lock: pid_lock,
@@ -216,11 +220,17 @@ impl eframe::App for App {
             ui.selectable_value(&mut self.nav, Nav::Logging, "Logging");
 
             // Show Conflicts tab with badge when conflicts exist
-            let conflict_count = self.state.status.as_ref()
-                .map(|s| s.remotes.iter()
-                    .flat_map(|r| &r.sync_rules)
-                    .map(|sr| sr.conflicts.len())
-                    .sum::<usize>())
+            let conflict_count = self
+                .state
+                .status
+                .as_ref()
+                .map(|s| {
+                    s.remotes
+                        .iter()
+                        .flat_map(|r| &r.sync_rules)
+                        .map(|sr| sr.conflicts.len())
+                        .sum::<usize>()
+                })
                 .unwrap_or(0);
             if conflict_count > 0 {
                 let label = format!("⚠ Conflicts ({})", conflict_count);

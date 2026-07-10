@@ -10,8 +10,6 @@ use onedrive_mount::{
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
-
-
 /// Apply a batch of resolutions. Returns the set of (remote, rule) pairs that were unblocked.
 pub async fn apply(
     resolutions: &[Resolution],
@@ -60,7 +58,8 @@ pub async fn apply(
                 // Remove conflict from status
                 status_tx.send_modify(|s| {
                     if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == res.remote)
-                        && let Some(rule) = remote.sync_rules.iter_mut().find(|sr| sr.name == res.rule)
+                        && let Some(rule) =
+                            remote.sync_rules.iter_mut().find(|sr| sr.name == res.rule)
                     {
                         rule.conflicts.retain(|c| c.file != res.file);
                         // If all conflicts resolved, unblock the rule
@@ -93,7 +92,9 @@ pub async fn apply(
         if let Some(remote) = s.remotes.iter().find(|r| r.name == res.remote)
             && let Some(rule) = remote.sync_rules.iter().find(|sr| sr.name == res.rule)
             && !rule.state.is_blocked()
-            && !unblocked.iter().any(|(r, n)| r == &res.remote && n == &res.rule)
+            && !unblocked
+                .iter()
+                .any(|(r, n)| r == &res.remote && n == &res.rule)
         {
             unblocked.push((res.remote.clone(), res.rule.clone()));
         }
@@ -128,10 +129,7 @@ async fn apply_one(res: &Resolution, conflict: &ConflictEntry) -> Result<()> {
             // Rename local to .conflict-<timestamp>, then copy remote → local
             let local = std::path::Path::new(&conflict.local_path);
             let ts = Utc::now().format("%Y%m%dT%H%M%S");
-            let stem = local
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy();
+            let stem = local.file_stem().unwrap_or_default().to_string_lossy();
             let ext = local
                 .extension()
                 .map(|e| format!(".{}", e.to_string_lossy()))
