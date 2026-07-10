@@ -46,6 +46,28 @@ pub struct SyncRuleStatus {
     pub last_sync: Option<DateTime<Utc>>,
     pub next_sync: Option<DateTime<Utc>>,
     pub state: SyncState,
+    /// Files transferred in the last successful sync.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files_transferred: Option<u32>,
+    /// Bytes transferred in the last successful sync.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_transferred: Option<u64>,
+    /// Unresolved conflicts blocking this rule.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conflicts: Vec<ConflictEntry>,
+}
+
+/// A single file conflict detected during bidirectional sync.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConflictEntry {
+    pub file: String,
+    pub local_path: String,
+    pub remote_path: String,
+    pub local_size: u64,
+    pub local_mtime: DateTime<Utc>,
+    pub remote_size: u64,
+    pub remote_mtime: DateTime<Utc>,
+    pub detected_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -59,6 +81,11 @@ pub enum SyncState {
         error: String,
         at: DateTime<Utc>,
     },
+    /// Rule is blocked because unresolved conflicts exist.
+    /// No further sync attempts until all conflicts are resolved.
+    BlockedOnConflicts {
+        since: DateTime<Utc>,
+    },
 }
 
 impl SyncState {
@@ -68,7 +95,12 @@ impl SyncState {
             Self::Running => "Running",
             Self::Succeeded => "OK",
             Self::Failed { .. } => "Failed",
+            Self::BlockedOnConflicts { .. } => "Blocked (conflicts)",
         }
+    }
+
+    pub fn is_blocked(&self) -> bool {
+        matches!(self, Self::BlockedOnConflicts { .. })
     }
 }
 

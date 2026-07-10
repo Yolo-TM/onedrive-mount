@@ -1,7 +1,7 @@
 // Integration tests for Config::validate()
 
 use onedrive_mount::config::{Config, MountConfig, RemoteConfig, SyncRule};
-use onedrive_mount::conflict::ConflictStrategy;
+use onedrive_mount::conflict::SyncStrategy;
 
 fn valid_remote(name: &str) -> RemoteConfig {
     RemoteConfig {
@@ -22,7 +22,7 @@ fn valid_rule(name: &str) -> SyncRule {
         local_path: "~/docs".into(),
         patterns: vec!["*".into()],
         interval: "5m".into(),
-        conflict_strategy: ConflictStrategy::RemoteWins,
+        sync_strategy: SyncStrategy::Bidirectional,
         enabled: true,
     }
 }

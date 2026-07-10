@@ -60,9 +60,11 @@
           makeWrapper
         ];
 
+        cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
+
         package = pkgs.rustPlatform.buildRustPackage {
           pname = "onedrive-mount";
-          version = "0.2.0";
+          version = cargoToml.package.version;
 
           # Exclude target/ and other non-source dirs so the store hash is
           # stable and doesn't differ between machines with dirty trees.

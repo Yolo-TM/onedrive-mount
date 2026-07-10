@@ -1,7 +1,7 @@
 // Integration tests: config roundtrip with real files
 
 use onedrive_mount::config::{Config, LogConfig, MountConfig, RemoteConfig, SyncRule};
-use onedrive_mount::conflict::ConflictStrategy;
+use onedrive_mount::conflict::SyncStrategy;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -28,7 +28,7 @@ fn make_full_config() -> Config {
                 local_path: "~/docs".into(),
                 patterns: vec!["*.kdbx".into()],
                 interval: "5m".into(),
-                conflict_strategy: ConflictStrategy::RemoteWins,
+                sync_strategy: SyncStrategy::Bidirectional,
                 enabled: true,
             }],
         }],
@@ -54,8 +54,8 @@ fn roundtrip_full_config() {
     assert_eq!(r.sync_rules.len(), 1);
     assert_eq!(r.sync_rules[0].name, "docs");
     assert!(matches!(
-        r.sync_rules[0].conflict_strategy,
-        ConflictStrategy::RemoteWins
+        r.sync_rules[0].sync_strategy,
+        SyncStrategy::Bidirectional
     ));
 }
 

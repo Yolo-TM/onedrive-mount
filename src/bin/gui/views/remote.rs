@@ -12,14 +12,14 @@ use onedrive_mount::{
 pub fn show(
     ui: &mut egui::Ui,
     remote: &mut RemoteConfig,
+    remote_idx: usize,
     daemon_status: &Option<DaemonStatus>,
-    _available_remotes: &[String],
     error: &mut Option<String>,
 ) -> bool {
     let mut changed = false;
 
     ui.heading("Remote");
-    egui::Grid::new(format!("remote_{}", remote.name))
+    egui::Grid::new(("remote_grid", remote_idx))
         .num_columns(2)
         .spacing([16.0, 6.0])
         .show(ui, |ui| {
@@ -34,7 +34,7 @@ pub fn show(
 
     ui.add_space(8.0);
     ui.collapsing("Mount options", |ui| {
-        egui::Grid::new(format!("mount_{}", remote.name))
+        egui::Grid::new(("mount_grid", remote_idx))
             .num_columns(2)
             .spacing([16.0, 6.0])
             .show(ui, |ui| {
@@ -155,7 +155,7 @@ pub fn show(
             local_path: String::new(),
             patterns: vec!["*".into()],
             interval: "15m".into(),
-            conflict_strategy: Default::default(),
+            sync_strategy: Default::default(),
             enabled: false,
         });
         changed = true;
@@ -171,5 +171,6 @@ fn sync_state_color(state: &onedrive_mount::status::SyncState) -> egui::Color32 
         SyncState::Running => egui::Color32::YELLOW,
         SyncState::Succeeded => egui::Color32::GREEN,
         SyncState::Failed { .. } => egui::Color32::RED,
+        SyncState::BlockedOnConflicts { .. } => egui::Color32::from_rgb(255, 165, 0),
     }
 }

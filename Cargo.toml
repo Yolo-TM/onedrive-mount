@@ -30,7 +30,7 @@ open = { version = "5", optional = true }
 tempfile = "3"
 
 [features]
-daemon = ["dep:tokio", "dep:tokio-util", "dep:notify", "dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:nix"]
+daemon = ["dep:tokio", "dep:tokio-util", "dep:notify", "dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:nix", "dep:serde_json"]
 gui = ["dep:eframe", "dep:resvg", "dep:serde_json", "dep:open"]
 
 [[bin]]

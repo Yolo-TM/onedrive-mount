@@ -30,6 +30,10 @@ pub fn gui_pid_file() -> PathBuf {
     data_dir().join("gui.pid")
 }
 
+pub fn conflict_resolutions_file() -> PathBuf {
+    data_dir().join("conflict-resolutions.toml")
+}
+
 /// Expands a leading `~` to the user's home directory.
 pub fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {

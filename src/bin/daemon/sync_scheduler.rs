@@ -54,6 +54,10 @@ impl SyncScheduler {
                     let mut timer = tokio::time::interval(interval);
                     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
+                    /// Consecutive successful syncs with 0 files transferred before warning.
+                    const ZERO_TRANSFER_WARN_THRESHOLD: u32 = 3;
+                    let mut consecutive_zero_transfers: u32 = 0;
+
                     loop {
                         // Publish next scheduled run time before sleeping
                         let next = chrono::Utc::now()
@@ -73,6 +77,24 @@ impl SyncScheduler {
                             timer.reset();
                         }
 
+                        // Skip sync if rule is blocked on unresolved conflicts
+                        let is_blocked = {
+                            let s = status_tx.borrow();
+                            s.remotes.iter()
+                                .find(|r| r.name == remote_name)
+                                .and_then(|r| r.sync_rules.iter().find(|sr| sr.name == rule.name))
+                                .map(|sr| sr.state.is_blocked())
+                                .unwrap_or(false)
+                        };
+                        if is_blocked {
+                            tracing::info!(
+                                remote = %remote_name,
+                                rule = %rule.name,
+                                "skipping sync — rule blocked on unresolved conflicts"
+                            );
+                            continue;
+                        }
+
                         update_next_sync_clear(&status_tx, &remote_name, &rule.name);
                         status_tx.send_modify(|s| {
                             set_rule_state(s, &remote_name, &rule.name, SyncState::Running, None)
@@ -82,7 +104,32 @@ impl SyncScheduler {
 
                         match result {
                             Some(Ok(outcome)) => {
-                                tracing::debug!(remote = %remote_name, rule = %rule.name, "sync succeeded");
+                                tracing::debug!(
+                                    remote = %remote_name,
+                                    rule = %rule.name,
+                                    files = outcome.files_transferred,
+                                    bytes = outcome.bytes_transferred,
+                                    "sync succeeded"
+                                );
+
+                                // Track consecutive zero-transfer cycles for bidirectional rules
+                                if outcome.files_transferred == 0 {
+                                    consecutive_zero_transfers += 1;
+                                    if consecutive_zero_transfers >= ZERO_TRANSFER_WARN_THRESHOLD
+                                        && matches!(rule.sync_strategy, onedrive_mount::conflict::SyncStrategy::Bidirectional | onedrive_mount::conflict::SyncStrategy::NewestWins)
+                                    {
+                                        warn!(
+                                            remote = %remote_name,
+                                            rule = %rule.name,
+                                            consecutive_cycles = consecutive_zero_transfers,
+                                            "sync may be stuck — {} consecutive cycles with 0 files transferred",
+                                            consecutive_zero_transfers
+                                        );
+                                    }
+                                } else {
+                                    consecutive_zero_transfers = 0;
+                                }
+
                                 status_tx.send_modify(|s| {
                                     set_rule_state(
                                         s,
@@ -90,7 +137,13 @@ impl SyncScheduler {
                                         &rule.name,
                                         SyncState::Succeeded,
                                         Some(outcome.at),
-                                    )
+                                    );
+                                    if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == remote_name)
+                                        && let Some(rule) = remote.sync_rules.iter_mut().find(|r| r.name == rule.name)
+                                    {
+                                        rule.files_transferred = Some(outcome.files_transferred);
+                                        rule.bytes_transferred = Some(outcome.bytes_transferred);
+                                    }
                                 });
                             }
                             Some(Err(e)) => {

@@ -2,7 +2,7 @@
 
 use crate::widgets::{interval_input, labeled_field};
 use eframe::egui;
-use onedrive_mount::{config::SyncRule, conflict::ConflictStrategy};
+use onedrive_mount::{config::SyncRule, conflict::SyncStrategy};
 
 /// Returns `true` when any field changed.
 /// `id` must be a stable value (e.g. the rule's index) — NOT the rule name,
@@ -32,13 +32,13 @@ pub fn show(ui: &mut egui::Ui, rule: &mut SyncRule, id: usize) -> bool {
 
             changed |= interval_input::show(ui, "Interval", &mut rule.interval);
 
-            ui.label("Conflict strategy").on_hover_text("What to do when the same file was changed both locally and on the remote since the last sync");
-            egui::ComboBox::from_id_salt("conflict_strategy")
-                .selected_text(rule.conflict_strategy.label())
+            ui.label("Sync strategy").on_hover_text("How files are synced between local and remote, and what happens when the same file has changed on both sides");
+            egui::ComboBox::from_id_salt("sync_strategy")
+                .selected_text(rule.sync_strategy.label())
                 .show_ui(ui, |ui| {
-                    for strategy in ConflictStrategy::all() {
-                        let (label, tooltip) = conflict_tooltip(strategy);
-                        if ui.selectable_value(&mut rule.conflict_strategy, *strategy, label)
+                    for strategy in SyncStrategy::all() {
+                        let (label, tooltip) = strategy_tooltip(strategy);
+                        if ui.selectable_value(&mut rule.sync_strategy, *strategy, label)
                             .on_hover_text(tooltip)
                             .clicked()
                         {
@@ -47,27 +47,42 @@ pub fn show(ui: &mut egui::Ui, rule: &mut SyncRule, id: usize) -> bool {
                     }
                 });
             ui.end_row();
+
+            if rule.sync_strategy.is_destructive() {
+                ui.label("");
+                ui.colored_label(egui::Color32::YELLOW, "⚠ This strategy is destructive — one side will be overwritten unconditionally.");
+                ui.end_row();
+            }
         });
 
     changed
 }
 
-fn conflict_tooltip(strategy: &ConflictStrategy) -> (&'static str, &'static str) {
+fn strategy_tooltip(strategy: &SyncStrategy) -> (&'static str, &'static str) {
     match strategy {
-        ConflictStrategy::RemoteWins => (
-            "Remote wins",
-            "The remote copy always overwrites the local copy.\n\
-             Local-only changes will be lost if the remote has a newer version of the same file.",
+        SyncStrategy::Bidirectional => (
+            "Bidirectional",
+            "Files are synced both ways.\n\
+             On conflict: the local copy is renamed with a timestamp suffix and kept locally.\n\
+             The remote version takes the original filename. No data is lost.",
         ),
-        ConflictStrategy::NewestWins => (
+        SyncStrategy::NewestWins => (
             "Newest wins",
-            "The file with the more recent modification time is kept.\n\
-             Neither copy is safe from being overwritten — whichever is older loses.",
+            "Files are synced both ways.\n\
+             On conflict: the file with the more recent modification time wins.\n\
+             The older version is overwritten — data loss is possible if clocks are skewed.",
         ),
-        ConflictStrategy::KeepBoth => (
-            "Keep both",
-            "The local conflicting file is renamed with a .conflict-<timestamp> suffix\n\
-             and both versions are kept. No data is lost, but duplicates accumulate over time.",
+        SyncStrategy::MirrorDown => (
+            "Mirror down (remote → local)",
+            "One-way: remote is the source of truth.\n\
+             Local is made an exact copy of remote on every sync.\n\
+             Local-only files are DELETED. Local changes are DISCARDED.",
+        ),
+        SyncStrategy::MirrorUp => (
+            "Mirror up (local → remote)",
+            "One-way: local is the source of truth.\n\
+             Remote is made an exact copy of local on every sync.\n\
+             Remote-only files are DELETED. Remote changes are DISCARDED.",
         ),
     }
 }

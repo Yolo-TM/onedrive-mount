@@ -20,9 +20,17 @@ remote_path = "Files/Docs"
 local_path = "~/Docs"
 patterns = ["*.pdf"]
 interval = "5m"
-conflict_strategy = "remote_wins"   # remote_wins | newest_wins | keep_both
+sync_strategy = "bidirectional"   # bidirectional | newest_wins | mirror_down | mirror_up
 # enabled = false
+#
+# Strategy reference:
+#   bidirectional  — sync both ways; on conflict, keep both (local renamed with .conflict- suffix)
+#   newest_wins    — sync both ways; on conflict, newer mtime wins (older is overwritten)
+#   mirror_down    — one-way remote → local; local changes are DELETED
+#   mirror_up      — one-way local → remote; remote changes are DELETED
 
 [log]
-# file = "~/.local/share/rclone/onedrive-mount.log"
-# level = "NOTICE"   # DEBUG | INFO | NOTICE | ERROR
+# file = "~/.local/share/onedrive-mount/daemon.log"
+# level = "INFO"   # DEBUG | INFO | NOTICE | ERROR
+# NOTE: log settings require a daemon restart to take effect.
+# They are not reloaded on config change like mount/sync settings are.

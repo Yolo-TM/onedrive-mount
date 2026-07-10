@@ -124,6 +124,9 @@ fn show_remote(
                     SyncState::Failed { error, .. } => {
                         (egui::Color32::RED, format!("Failed: {error}"))
                     }
+                    SyncState::BlockedOnConflicts { .. } => {
+                        (egui::Color32::from_rgb(255, 165, 0), format!("⚠ {} conflict(s)", rule.conflicts.len()))
+                    }
                 };
                 ui.colored_label(color, "●");
                 ui.label(&rule.name);
@@ -135,6 +138,12 @@ fn show_remote(
                 }
                 if let Some(next) = rule.next_sync {
                     ui.weak(format!("next: {}", next.format("%H:%M:%S")));
+                }
+
+                // Show transfer stats from last successful sync
+                if let Some(files) = rule.files_transferred {
+                    let bytes_str = rule.bytes_transferred.map(format_size).unwrap_or_default();
+                    ui.weak(format!("{files} file(s), {bytes_str}"));
                 }
             });
         }

@@ -19,6 +19,9 @@ fn sample_status() -> DaemonStatus {
                 last_sync: Some(chrono::Utc::now()),
                 next_sync: None,
                 state: SyncState::Succeeded,
+                files_transferred: None,
+                bytes_transferred: None,
+                conflicts: vec![],
             }],
         }],
     }

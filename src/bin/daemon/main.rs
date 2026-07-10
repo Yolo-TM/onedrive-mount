@@ -2,6 +2,8 @@ mod app;
 mod config_watcher;
 mod mount_manager;
 mod rclone;
+mod resolution_executor;
+mod resolution_watcher;
 mod signal;
 mod status_writer;
 mod sync_executor;

@@ -5,7 +5,10 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-pub fn start(mut rx: watch::Receiver<DaemonStatus>, cancel: CancellationToken) {
+pub fn start(
+    mut rx: watch::Receiver<DaemonStatus>,
+    cancel: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let path = status_file();
 
@@ -29,11 +32,13 @@ pub fn start(mut rx: watch::Receiver<DaemonStatus>, cancel: CancellationToken) {
             remote.mount = onedrive_mount::status::MountState::Unmounted;
             for rule in &mut remote.sync_rules {
                 rule.next_sync = None;
-                if rule.state == onedrive_mount::status::SyncState::Running {
+                // Reset Running to Idle on shutdown, but preserve BlockedOnConflicts
+                // so conflicts remain visible after daemon restart.
+                if matches!(rule.state, onedrive_mount::status::SyncState::Running) {
                     rule.state = onedrive_mount::status::SyncState::Idle;
                 }
             }
         }
         let _ = snapshot.save(&path);
-    });
+    })
 }

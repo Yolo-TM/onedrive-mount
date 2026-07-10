@@ -1,3 +1,4 @@
+pub mod conflict_resolver;
 pub mod log_config;
 pub mod remote;
 pub mod service;

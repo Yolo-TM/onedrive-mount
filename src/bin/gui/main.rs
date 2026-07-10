@@ -9,12 +9,13 @@ mod views;
 mod widgets;
 
 fn main() -> eframe::Result {
-    // Handle --version before anything else — no PID lock, no Wayland stripping needed
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("onedrive-mount {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
+
+    let resolve_conflicts = args.iter().any(|a| a == "--resolve-conflicts");
 
     // winit prefers Wayland when WAYLAND_DISPLAY is set, but the Wayland libs may not be
     // available in the dynamic linker path (common on NixOS). Force X11 so winit uses the
@@ -45,7 +46,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "onedrive-mount",
         options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc, pid_lock)))),
+        Box::new(move |cc| Ok(Box::new(app::App::new(cc, pid_lock, resolve_conflicts)))),
     )
 }
 

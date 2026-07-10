@@ -20,6 +20,31 @@ fn sanitize_flag(value: &str, field: &str) -> String {
     }
 }
 
+/// Appends `--filter` arguments for the given include patterns.
+/// Uses `--filter "+ <pattern>"` for each pattern, then `--filter "- *"` to exclude everything
+/// else. This avoids the indeterminate ordering problem of mixing `--include` and `--exclude`.
+///
+/// Note: rclone `--filter` takes a single argument with an embedded space (e.g. `"- *"`).
+/// This is intentional, not a split-argument bug.
+#[allow(clippy::suspicious_command_arg_space)]
+fn add_filter_args(cmd: &mut Command, patterns: &[String]) {
+    for p in patterns {
+        cmd.arg("--filter").arg(format!("+ {p}"));
+    }
+    cmd.arg("--filter").arg("- *");
+}
+
+/// Appends filter args for bidirectional sync: includes the user patterns
+/// but always excludes `.conflict-*` files so they stay local only.
+#[allow(clippy::suspicious_command_arg_space)]
+fn add_filter_args_excluding_conflicts(cmd: &mut Command, patterns: &[String]) {
+    cmd.arg("--filter").arg("- *.conflict-*");
+    for p in patterns {
+        cmd.arg("--filter").arg(format!("+ {p}"));
+    }
+    cmd.arg("--filter").arg("- *");
+}
+
 pub fn mount_command(remote: &RemoteConfig, log: &LogConfig) -> Command {
     let mut cmd = Command::new("rclone");
     cmd.arg("mount")
@@ -70,14 +95,45 @@ pub fn mount_command(remote: &RemoteConfig, log: &LogConfig) -> Command {
     cmd
 }
 
-/// Copies files from `src` to `dst`, skipping files where the destination is newer.
-pub fn copy_command(src: &str, dst: &str, patterns: &[String]) -> Command {
+/// Copies files from `src` to `dst`.
+/// `mode` controls update/ignore-existing behaviour.
+/// `exclude_conflicts` adds a filter to keep `.conflict-*` files local only.
+pub fn copy_command(
+    src: &str,
+    dst: &str,
+    patterns: &[String],
+    mode: CopyMode,
+    exclude_conflicts: bool,
+) -> Command {
     let mut cmd = Command::new("rclone");
-    cmd.arg("copy").arg(src).arg(dst).arg("--update");
+    cmd.arg("copy").arg(src).arg(dst);
 
-    for p in patterns {
-        cmd.arg("--include").arg(p);
+    match mode {
+        CopyMode::Normal => {}
+        CopyMode::Update => {
+            cmd.arg("--update");
+        }
+        CopyMode::IgnoreExisting => {
+            cmd.arg("--ignore-existing");
+        }
     }
+
+    if exclude_conflicts {
+        add_filter_args_excluding_conflicts(&mut cmd, patterns);
+    } else {
+        add_filter_args(&mut cmd, patterns);
+    }
+
+    cmd
+}
+
+/// Syncs `src` to `dst`, making `dst` an exact replica of `src`.
+/// Destructive: deletes files in `dst` that don't exist in `src`.
+pub fn sync_command(src: &str, dst: &str, patterns: &[String]) -> Command {
+    let mut cmd = Command::new("rclone");
+    cmd.arg("sync").arg(src).arg(dst);
+
+    add_filter_args(&mut cmd, patterns);
 
     cmd
 }
@@ -93,11 +149,38 @@ pub fn check_command(remote: &str, local: &str, patterns: &[String]) -> Command 
         .arg("--differ")
         .arg("-");
 
-    for p in patterns {
-        cmd.arg("--include").arg(p);
-    }
+    add_filter_args(&mut cmd, patterns);
 
     cmd
+}
+
+/// Sends a desktop notification about sync conflicts. Fire-and-forget — the daemon
+/// never blocks on this. Returns false if no DISPLAY is available.
+#[allow(dead_code)] // Infrastructure for Phase 2 conflict detection wiring
+pub fn notify_conflicts(rule_name: &str, count: usize) -> bool {
+    // Check for a display server
+    if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
+        return false;
+    }
+
+    let summary = format!("Sync conflict — {rule_name}");
+    let body = format!(
+        "{count} file(s) need resolution in rule '{rule_name}'.\nOpen onedrive-mount to resolve."
+    );
+
+    let result = Command::new("notify-send")
+        .arg("--app-name=onedrive-mount")
+        .arg("--urgency=critical")
+        .arg(&summary)
+        .arg(&body)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+
+    match result {
+        Ok(_) => true, // fire and forget — don't wait on the child
+        Err(_) => false,
+    }
 }
 
 pub fn fusermount_command(mount_point: &std::path::Path) -> Command {
@@ -117,4 +200,14 @@ pub fn fusermount_command(mount_point: &std::path::Path) -> Command {
     let mut cmd = Command::new(binary);
     cmd.arg("-u").arg(mount_point);
     cmd
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopyMode {
+    /// No special flags — copy everything, overwrite if src is different.
+    Normal,
+    /// `--update` — skip files where the destination is newer.
+    Update,
+    /// `--ignore-existing` — skip files that already exist on the destination.
+    IgnoreExisting,
 }

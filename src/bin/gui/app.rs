@@ -6,7 +6,7 @@ use crate::{
     rclone_query,
     state::State,
     status_reader, systemd,
-    views::{log_config, remote, service, status, wizard},
+    views::{conflict_resolver, log_config, remote, service, status, wizard},
 };
 use eframe::egui;
 use onedrive_mount::config::RemoteConfig;
@@ -18,6 +18,7 @@ enum Nav {
     Status,
     Remotes,
     Logging,
+    Conflicts,
 }
 
 pub struct App {
@@ -35,10 +36,11 @@ impl App {
     pub fn new(
         _cc: &eframe::CreationContext<'_>,
         pid_lock: onedrive_mount::pid_lock::PidLock,
+        resolve_conflicts: bool,
     ) -> Self {
         Self {
             state: State::new(),
-            nav: Nav::Status,
+            nav: if resolve_conflicts { Nav::Conflicts } else { Nav::Status },
             did_startup: false,
             daemon_starting: false,
             _pid_lock: pid_lock,
@@ -212,6 +214,24 @@ impl eframe::App for App {
             ui.selectable_value(&mut self.nav, Nav::Status, "Status");
             ui.selectable_value(&mut self.nav, Nav::Remotes, "Remotes");
             ui.selectable_value(&mut self.nav, Nav::Logging, "Logging");
+
+            // Show Conflicts tab with badge when conflicts exist
+            let conflict_count = self.state.status.as_ref()
+                .map(|s| s.remotes.iter()
+                    .flat_map(|r| &r.sync_rules)
+                    .map(|sr| sr.conflicts.len())
+                    .sum::<usize>())
+                .unwrap_or(0);
+            if conflict_count > 0 {
+                let label = format!("⚠ Conflicts ({})", conflict_count);
+                ui.selectable_value(
+                    &mut self.nav,
+                    Nav::Conflicts,
+                    egui::RichText::new(label).color(egui::Color32::from_rgb(255, 165, 0)),
+                );
+            } else {
+                ui.selectable_value(&mut self.nav, Nav::Conflicts, "Conflicts");
+            }
         });
 
         egui::CentralPanel::default().show_inside(ui, |ui| match self.nav {
@@ -233,6 +253,11 @@ impl eframe::App for App {
                     if log_config::show(ui, &mut self.state.config.log, &mut self.state.log_tail) {
                         self.state.config_dirty = true;
                     }
+                });
+            }
+            Nav::Conflicts => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    conflict_resolver::show(ui, &self.state.status, &mut self.state.service_error);
                 });
             }
         });
@@ -321,8 +346,8 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
                     if remote::show(
                         ui,
                         &mut state.config.remotes[i],
+                        i,
                         &state.status,
-                        &state.available_remotes,
                         &mut state.service_error,
                     ) {
                         state.config_dirty = true;

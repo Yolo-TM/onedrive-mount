@@ -3,6 +3,8 @@
 use crate::{
     config_watcher::{ConfigEvent, ConfigWatcher},
     mount_manager::MountManager,
+    resolution_executor,
+    resolution_watcher::{ResolutionEvent, ResolutionWatcher},
     status_writer,
     sync_scheduler::SyncScheduler,
 };
@@ -23,8 +25,11 @@ pub async fn run(config: Config) -> Result<()> {
     let (config_tx, mut config_rx) = mpsc::channel::<ConfigEvent>(4);
     let _watcher = ConfigWatcher::new(config_tx)?;
 
+    let (resolution_tx, mut resolution_rx) = mpsc::channel::<ResolutionEvent>(4);
+    let _resolution_watcher = ResolutionWatcher::new(resolution_tx)?;
+
     let cancel = CancellationToken::new();
-    status_writer::start(status_rx, cancel.clone());
+    let status_writer_handle = status_writer::start(status_rx, cancel.clone());
 
     let mut mount_manager = MountManager::new(config.log.clone());
     let mut scheduler = SyncScheduler::new();
@@ -77,6 +82,22 @@ pub async fn run(config: Config) -> Result<()> {
                     }
                 }
             }
+            Some(ResolutionEvent::Loaded(rf)) = resolution_rx.recv() => {
+                info!(count = rf.resolutions.len(), "processing conflict resolutions");
+                let unblocked = resolution_executor::apply(&rf.resolutions, &status_tx).await;
+
+                // Clear the resolutions file after processing
+                let empty = onedrive_mount::resolution::ResolutionFile::default();
+                if let Err(e) = empty.save(&onedrive_mount::paths::conflict_resolutions_file()) {
+                    warn!(error = %e, "failed to clear conflict-resolutions.toml");
+                }
+
+                // Re-trigger unblocked rules
+                for (remote, rule) in &unblocked {
+                    info!(remote = %remote, rule = %rule, "re-triggering sync after conflict resolution");
+                    scheduler.trigger_sync_now(remote, rule);
+                }
+            }
         }
     }
 
@@ -84,6 +105,8 @@ pub async fn run(config: Config) -> Result<()> {
     scheduler.stop().await;
     mount_manager.stop_all().await;
     cancel.cancel();
+    // Wait for status_writer to flush its final shutdown state to disk
+    let _ = status_writer_handle.await;
 
     Ok(())
 }
@@ -174,6 +197,9 @@ async fn reload(
                                 last_sync: None,
                                 next_sync: None,
                                 state: SyncState::Idle,
+                                files_transferred: None,
+                                bytes_transferred: None,
+                                conflicts: vec![],
                             })
                             .collect(),
                     });
@@ -235,6 +261,9 @@ async fn reload(
                             .and_then(|s| s.last_sync),
                         next_sync: None,
                         state: SyncState::Idle,
+                        files_transferred: None,
+                        bytes_transferred: None,
+                        conflicts: vec![],
                     })
                     .collect();
             }
@@ -298,6 +327,9 @@ fn build_initial_status(config: &Config) -> DaemonStatus {
                         last_sync: None,
                         next_sync: None,
                         state: SyncState::Idle,
+                        files_transferred: None,
+                        bytes_transferred: None,
+                        conflicts: vec![],
                     })
                     .collect(),
             })

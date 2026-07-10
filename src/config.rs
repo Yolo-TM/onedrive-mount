@@ -1,6 +1,6 @@
 // The single source of truth for all user-facing settings shared between GUI and daemon
 
-use crate::{conflict::ConflictStrategy, defaults};
+use crate::{conflict::SyncStrategy, defaults};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -86,7 +86,7 @@ pub struct SyncRule {
     #[serde(default = "defaults::sync_interval")]
     pub interval: String,
     #[serde(default)]
-    pub conflict_strategy: ConflictStrategy,
+    pub sync_strategy: SyncStrategy,
     #[serde(default = "defaults::rule_enabled")]
     pub enabled: bool,
 }
