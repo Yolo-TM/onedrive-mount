@@ -58,7 +58,6 @@
           pkg-config
           autoPatchelfHook
           makeWrapper
-          rclone # needed for integration tests (sync_strategies)
         ];
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
@@ -80,6 +79,8 @@
           cargoLock.lockFile = ./Cargo.lock;
 
           inherit buildInputs nativeBuildInputs;
+
+          nativeCheckInputs = [ pkgs.rclone ];
 
           # Build both binaries; features joined as a single string is what
           # rustPlatform.buildRustPackage expects for CARGO_BUILD_FEATURES.

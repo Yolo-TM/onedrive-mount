@@ -81,12 +81,14 @@ fn show_remote(
                 ui.colored_label(egui::Color32::YELLOW, "● Mounting…");
             }
             Some(MountState::Mounted { since }) => {
-                let label = format!("● Mounted since {}", since.format("%H:%M:%S"));
+                let local_since = since.with_timezone(&chrono::Local);
+                let label = format!("● Mounted since {}", local_since.format("%H:%M:%S"));
                 ui.colored_label(egui::Color32::GREEN, label);
             }
             Some(MountState::Failed { error, at }) => {
+                let local_at = at.with_timezone(&chrono::Local);
                 ui.colored_label(egui::Color32::RED, "● Failed")
-                    .on_hover_text(format!("at {}\n{}", at.format("%H:%M:%S"), error));
+                    .on_hover_text(format!("at {}\n{}", local_at.format("%H:%M:%S"), error));
             }
         }
     });
@@ -135,10 +137,12 @@ fn show_remote(
                 ui.label(egui::RichText::new(&label).small());
 
                 if let Some(last) = rule.last_sync {
-                    ui.weak(format!("last: {}", last.format("%H:%M:%S")));
+                    let local_last = last.with_timezone(&chrono::Local);
+                    ui.weak(format!("last: {}", local_last.format("%H:%M:%S")));
                 }
                 if let Some(next) = rule.next_sync {
-                    ui.weak(format!("next: {}", next.format("%H:%M:%S")));
+                    let local_next = next.with_timezone(&chrono::Local);
+                    ui.weak(format!("next: {}", local_next.format("%H:%M:%S")));
                 }
 
                 // Show transfer stats from last successful sync

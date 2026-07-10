@@ -107,8 +107,8 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
         ui.end_row();
 
         ui.label("Modified");
-        ui.label(entry.local_mtime.format("%Y-%m-%d %H:%M:%S").to_string());
-        ui.label(entry.remote_mtime.format("%Y-%m-%d %H:%M:%S").to_string());
+        ui.label(entry.local_mtime.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S").to_string());
+        ui.label(entry.remote_mtime.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S").to_string());
         ui.end_row();
 
         ui.label("Path");
@@ -120,7 +120,7 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
     ui.add_space(2.0);
     ui.weak(format!(
         "Detected: {}",
-        entry.detected_at.format("%Y-%m-%d %H:%M:%S")
+        entry.detected_at.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S")
     ));
 
     // Try to show a diff for small text files
