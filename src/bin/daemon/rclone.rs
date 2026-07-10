@@ -177,10 +177,7 @@ pub fn notify_conflicts(rule_name: &str, count: usize) -> bool {
         .stderr(std::process::Stdio::null())
         .spawn();
 
-    match result {
-        Ok(_) => true, // fire and forget — don't wait on the child
-        Err(_) => false,
-    }
+    result.is_ok() // fire and forget — don't wait on the child
 }
 
 pub fn fusermount_command(mount_point: &std::path::Path) -> Command {

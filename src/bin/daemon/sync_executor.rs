@@ -174,12 +174,12 @@ fn parse_stats(stderr: &[u8]) -> TransferStats {
             continue;
         }
         // Parse as generic JSON value
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
-            if let Some(stats) = v.get("stats") {
-                let files = stats.get("transfers").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                let bytes = stats.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0);
-                return TransferStats { files, bytes };
-            }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(line)
+            && let Some(stats) = v.get("stats")
+        {
+            let files = stats.get("transfers").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let bytes = stats.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+            return TransferStats { files, bytes };
         }
     }
     TransferStats::default()
