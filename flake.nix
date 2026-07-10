@@ -58,6 +58,7 @@
           pkg-config
           autoPatchelfHook
           makeWrapper
+          rclone # needed for integration tests (sync_strategies)
         ];
 
         cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);

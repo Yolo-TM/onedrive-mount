@@ -152,7 +152,8 @@ impl eframe::App for App {
                                 }
                             }
                             MountState::Failed { error, at } => {
-                                format!("{}: Failed at {}\n{}", remote.name, at.format("%H:%M:%S"), error)
+                                let local_at = at.with_timezone(&chrono::Local);
+                                format!("{}: Failed at {}\n{}", remote.name, local_at.format("%H:%M:%S"), error)
                             }
                             _ => format!("{}: {}", remote.name, mount_state_label(&remote.mount)),
                         };
