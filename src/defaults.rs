@@ -68,10 +68,9 @@ pub fn parse_interval_secs(s: &str) -> Option<u64> {
         n.parse::<u64>().ok()?
     } else if let Some(n) = s.strip_suffix('m') {
         n.parse::<u64>().ok()? * 60
-    } else if let Some(n) = s.strip_suffix('h') {
-        n.parse::<u64>().ok()? * 3600
     } else {
-        return None;
+        let n = s.strip_suffix('h')?;
+        n.parse::<u64>().ok()? * 3600
     };
     if secs == 0 { None } else { Some(secs) }
 }
