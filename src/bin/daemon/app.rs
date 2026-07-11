@@ -116,13 +116,16 @@ async fn startup_remote(
     status_tx: &watch::Sender<DaemonStatus>,
     remote: &RemoteConfig,
 ) {
-    let state = mounts
-        .start(remote)
-        .await
-        .unwrap_or_else(|e| MountState::Failed {
-            error: e.to_string(),
-            at: Utc::now(),
-        });
+    let state = match mounts.start(remote).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(remote = %remote.name, error = %e, "failed to start mount");
+            MountState::Failed {
+                error: e.to_string(),
+                at: Utc::now(),
+            }
+        }
+    };
 
     status_tx.send_modify(|s| {
         if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
@@ -173,11 +176,10 @@ async fn reload(
             continue;
         }
 
-        let is_new = !old.remotes.iter().any(|r| r.name == new_remote.name);
-        let changed = old
-            .remotes
-            .iter()
-            .find(|r| r.name == new_remote.name)
+        let old_remote_entry = old.remotes.iter().find(|r| r.name == new_remote.name);
+        let is_new = old_remote_entry.is_none();
+        let was_disabled = old_remote_entry.map(|r| !r.enabled).unwrap_or(false);
+        let changed = old_remote_entry
             .map(|old_remote| remote_config_changed(old_remote, new_remote))
             .unwrap_or(false);
 
@@ -205,6 +207,9 @@ async fn reload(
                     });
                 }
             });
+            startup_remote(mounts, status_tx, new_remote).await;
+        } else if was_disabled {
+            info!(remote = %new_remote.name, "remote re-enabled — mounting");
             startup_remote(mounts, status_tx, new_remote).await;
         } else if changed {
             info!(remote = %new_remote.name, "remote config changed — remounting");
@@ -307,6 +312,9 @@ fn remote_config_changed(old: &RemoteConfig, new: &RemoteConfig) -> bool {
 }
 
 fn build_initial_status(config: &Config) -> DaemonStatus {
+    // Load previous status to restore persisted state (conflicts, last_sync times).
+    let prev = onedrive_mount::status::DaemonStatus::load(&onedrive_mount::paths::status_file());
+
     DaemonStatus {
         pid: std::process::id(),
         started_at: Some(Utc::now()),
@@ -322,14 +330,29 @@ fn build_initial_status(config: &Config) -> DaemonStatus {
                     .sync_rules
                     .iter()
                     .filter(|rule| rule.enabled)
-                    .map(|rule| SyncRuleStatus {
-                        name: rule.name.clone(),
-                        last_sync: None,
-                        next_sync: None,
-                        state: SyncState::Idle,
-                        files_transferred: None,
-                        bytes_transferred: None,
-                        conflicts: vec![],
+                    .map(|rule| {
+                        // Restore last_sync and any unresolved conflicts from previous run
+                        let prev_rule = prev.as_ref().and_then(|p| {
+                            p.remotes
+                                .iter()
+                                .find(|pr| pr.name == r.name)
+                                .and_then(|pr| pr.sync_rules.iter().find(|sr| sr.name == rule.name))
+                        });
+                        let (state, conflicts) = match prev_rule {
+                            Some(pr) if pr.state.is_blocked() => {
+                                (pr.state.clone(), pr.conflicts.clone())
+                            }
+                            _ => (SyncState::Idle, vec![]),
+                        };
+                        SyncRuleStatus {
+                            name: rule.name.clone(),
+                            last_sync: prev_rule.and_then(|pr| pr.last_sync),
+                            next_sync: None,
+                            state,
+                            files_transferred: prev_rule.and_then(|pr| pr.files_transferred),
+                            bytes_transferred: prev_rule.and_then(|pr| pr.bytes_transferred),
+                            conflicts,
+                        }
                     })
                     .collect(),
             })

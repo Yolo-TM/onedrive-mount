@@ -180,23 +180,36 @@ pub fn notify_conflicts(rule_name: &str, count: usize) -> bool {
     result.is_ok() // fire and forget — don't wait on the child
 }
 
-pub fn fusermount_command(mount_point: &std::path::Path) -> Command {
-    // fuse3 systems use fusermount3; fuse2 systems use fusermount — try 3 first
-    let binary = if std::process::Command::new("fusermount3")
-        .arg("--version")
+/// Run `fusermount -u` (or `fusermount3 -u`) on the given mount point.
+/// Returns once the unmount has completed (or failed).
+pub async fn fusermount(mount_point: &std::path::Path) {
+    let _ = tokio::process::Command::new(fusermount_binary())
+        .arg("-u")
+        .arg(mount_point)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-    {
-        "fusermount3"
-    } else {
-        "fusermount"
-    };
-    let mut cmd = Command::new(binary);
-    cmd.arg("-u").arg(mount_point);
-    cmd
+        .await;
+}
+
+/// Returns "fusermount3" if available, otherwise "fusermount". Result is cached.
+fn fusermount_binary() -> &'static str {
+    use std::sync::OnceLock;
+    static BINARY: OnceLock<&'static str> = OnceLock::new();
+    BINARY.get_or_init(|| {
+        let has_fuse3 = std::process::Command::new("fusermount3")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if has_fuse3 {
+            "fusermount3"
+        } else {
+            "fusermount"
+        }
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

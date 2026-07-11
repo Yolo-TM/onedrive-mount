@@ -101,7 +101,7 @@ impl SyncScheduler {
                             set_rule_state(s, &remote_name, &rule.name, SyncState::Running, None)
                         });
 
-                        let result = run_with_retry(&remote_name, &rule, &cancel).await;
+                        let result = run_with_retry(&remote_name, &rule, &cancel, &status_tx).await;
 
                         match result {
                             Some(Ok(outcome)) => {
@@ -152,6 +152,7 @@ impl SyncScheduler {
                                 });
                             }
                             Some(Err(e)) => {
+                                consecutive_zero_transfers = 0;
                                 error!(remote = %remote_name, rule = %rule.name, error = %e, "sync failed after retries");
                                 status_tx.send_modify(|s| {
                                     set_rule_state(
@@ -218,6 +219,7 @@ async fn run_with_retry(
     remote_name: &str,
     rule: &onedrive_mount::config::SyncRule,
     cancel: &CancellationToken,
+    status_tx: &watch::Sender<DaemonStatus>,
 ) -> Option<anyhow::Result<sync_executor::SyncOutcome>> {
     let mut last_err = None;
     for attempt in 0..=MAX_RETRIES {
@@ -230,7 +232,7 @@ async fn run_with_retry(
             }
         }
 
-        match sync_executor::run(remote_name, rule).await {
+        match sync_executor::run(remote_name, rule, status_tx).await {
             Ok(outcome) => return Some(Ok(outcome)),
             Err(e) => {
                 warn!(remote = %remote_name, rule = %rule.name, error = %e, "sync attempt failed");
