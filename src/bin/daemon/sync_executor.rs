@@ -80,8 +80,7 @@ async fn run_inner(
 
     match rule.sync_strategy {
         SyncStrategy::Bidirectional => {
-            let blocked =
-                rename_conflicts(local, remote, remote_name, rule, status_tx).await?;
+            let blocked = rename_conflicts(local, remote, remote_name, rule, status_tx).await?;
             if blocked {
                 return Ok(stats);
             }

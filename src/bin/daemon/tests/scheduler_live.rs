@@ -119,7 +119,10 @@ async fn scheduler_fires_multiple_cycles() {
 
     let status_snapshot = status_rx.borrow().clone();
     let ts = last_sync(&status_snapshot, remote_name, rule_name);
-    assert!(ts.is_some(), "last_sync should be set after multiple cycles");
+    assert!(
+        ts.is_some(),
+        "last_sync should be set after multiple cycles"
+    );
 
     let age = chrono::Utc::now() - ts.unwrap();
     assert!(
@@ -184,7 +187,10 @@ async fn trigger_sync_now_fires_immediately() {
 
     // Trigger an immediate sync.
     let triggered = scheduler.trigger_sync_now(remote_name, rule_name);
-    assert!(triggered, "trigger_sync_now should return true for a known rule");
+    assert!(
+        triggered,
+        "trigger_sync_now should return true for a known rule"
+    );
 
     // Wait up to 5s for the sync to complete.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);

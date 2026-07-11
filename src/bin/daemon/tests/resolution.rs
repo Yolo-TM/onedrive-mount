@@ -2,9 +2,7 @@ use chrono::Utc;
 use onedrive_mount::{
     paths::sync_baseline_file,
     resolution::{Resolution, ResolutionAction},
-    status::{
-        ConflictEntry, DaemonStatus, MountState, RemoteStatus, SyncRuleStatus, SyncState,
-    },
+    status::{ConflictEntry, DaemonStatus, MountState, RemoteStatus, SyncRuleStatus, SyncState},
     sync_baseline::SyncBaseline,
 };
 use std::fs;

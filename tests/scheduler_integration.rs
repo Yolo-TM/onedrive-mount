@@ -350,9 +350,8 @@ async fn blocked_rules_are_skipped() {
 
     let mut initial_status = make_status("local-test", "test-rule");
     // Set the rule to blocked state
-    initial_status.remotes[0].sync_rules[0].state = SyncState::BlockedOnConflicts {
-        since: Utc::now(),
-    };
+    initial_status.remotes[0].sync_rules[0].state =
+        SyncState::BlockedOnConflicts { since: Utc::now() };
 
     let (status_tx, status_rx) = watch::channel(initial_status);
     let cancel = CancellationToken::new();

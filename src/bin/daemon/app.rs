@@ -244,10 +244,7 @@ async fn reload(
                     .iter()
                     .filter(|r| r.enabled)
                     .map(|r| {
-                        let old_status = rs
-                            .sync_rules
-                            .iter()
-                            .find(|s| s.name == r.name);
+                        let old_status = rs.sync_rules.iter().find(|s| s.name == r.name);
                         SyncRuleStatus {
                             name: r.name.clone(),
                             last_sync: old_status.and_then(|s| s.last_sync),
@@ -256,13 +253,9 @@ async fn reload(
                                 .filter(|s| s.state.is_blocked())
                                 .map(|s| s.state.clone())
                                 .unwrap_or(SyncState::Idle),
-                            files_transferred: old_status
-                                .and_then(|s| s.files_transferred),
-                            bytes_transferred: old_status
-                                .and_then(|s| s.bytes_transferred),
-                            conflicts: old_status
-                                .map(|s| s.conflicts.clone())
-                                .unwrap_or_default(),
+                            files_transferred: old_status.and_then(|s| s.files_transferred),
+                            bytes_transferred: old_status.and_then(|s| s.bytes_transferred),
+                            conflicts: old_status.map(|s| s.conflicts.clone()).unwrap_or_default(),
                         }
                     })
                     .collect();
