@@ -19,7 +19,7 @@ use onedrive_mount::{
     pid_lock::PidLock,
 };
 use tracing::error;
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::{EnvFilter, Layer, fmt, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -116,7 +116,19 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
 
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::layer().with_writer(file_writer).with_ansi(false))
+        .with(
+            fmt::layer()
+                .with_writer(file_writer)
+                .with_ansi(false)
+                .with_timer(fmt::time::ChronoLocal::rfc_3339()),
+        )
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(false)
+                .with_timer(fmt::time::ChronoLocal::rfc_3339())
+                .with_filter(EnvFilter::new("info")),
+        )
         .init();
 
     guard

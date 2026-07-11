@@ -9,11 +9,17 @@ use onedrive_mount::{
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
+pub struct ApplyResult {
+    pub unblocked: Vec<(String, String)>,
+    pub failed: Vec<Resolution>,
+}
+
 pub async fn apply(
     resolutions: &[Resolution],
     status_tx: &watch::Sender<DaemonStatus>,
-) -> Vec<(String, String)> {
+) -> ApplyResult {
     let mut unblocked = Vec::new();
+    let mut failed = Vec::new();
 
     for res in resolutions {
         info!(
@@ -100,6 +106,7 @@ pub async fn apply(
                     error = %e,
                     "failed to apply resolution"
                 );
+                failed.push(res.clone());
             }
         }
     }
@@ -117,7 +124,7 @@ pub async fn apply(
         }
     }
 
-    unblocked
+    ApplyResult { unblocked, failed }
 }
 
 async fn apply_one(res: &Resolution, conflict: &ConflictEntry) -> Result<()> {
@@ -142,11 +149,22 @@ async fn apply_one(res: &Resolution, conflict: &ConflictEntry) -> Result<()> {
                 .context("restoring local file for keep_local")?;
         }
         ResolutionAction::KeepRemote => {
-            info!(
-                file = %res.file,
-                local = %conflict.original_local_path,
-                "keep_remote: remote version already in place locally, discarding conflict file"
-            );
+            let original = std::path::Path::new(&conflict.original_local_path);
+            if !original.exists() {
+                info!(
+                    file = %res.file,
+                    local = %conflict.original_local_path,
+                    remote = %conflict.remote_path,
+                    "keep_remote: local file missing — downloading remote version"
+                );
+                run_copy(&conflict.remote_path, &conflict.original_local_path).await?;
+            } else {
+                info!(
+                    file = %res.file,
+                    local = %conflict.original_local_path,
+                    "keep_remote: remote version already in place locally, discarding conflict file"
+                );
+            }
         }
         ResolutionAction::KeepBoth => {
             let conflict_file = std::path::Path::new(&conflict.local_path);

@@ -187,10 +187,22 @@ impl MountManager {
                             self.remount(remote).await
                         }
                         Ok(None) => {
-                            error!(remote = %remote.name, "mount point inaccessible — remounting");
+                            let restart_count = entry.restart_count;
+                            let delay_secs = RESTART_DELAYS
+                                .get(restart_count as usize)
+                                .copied()
+                                .unwrap_or(*RESTART_DELAYS.last().unwrap());
+                            error!(remote = %remote.name, restart_count, "mount point inaccessible — remounting");
                             crate::rclone::fusermount(&mount_point).await;
                             self.mounts.remove(&remote.name);
-                            self.remount(remote).await
+                            let state = self.remount(remote).await;
+                            if let Some(entry) = self.mounts.get_mut(&remote.name) {
+                                entry.restart_count = restart_count + 1;
+                                entry.restart_not_before = Some(
+                                    tokio::time::Instant::now() + Duration::from_secs(delay_secs),
+                                );
+                            }
+                            state
                         }
                         Err(e) => {
                             warn!(remote = %remote.name, error = %e, "could not check process status — treating as stopped");

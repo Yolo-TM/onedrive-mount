@@ -30,6 +30,7 @@ fn unit_content(binary_path: &std::path::Path, extra_path_dirs: &[std::path::Pat
          [Service]\n\
          ExecStart={}\n\
          Environment=PATH={}\n\
+         Environment=RUST_LOG=info\n\
          Restart=on-failure\n\
          RestartSec=10s\n\
          Type=exec\n\

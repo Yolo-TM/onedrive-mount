@@ -77,14 +77,16 @@ pub async fn run(config: Config) -> Result<()> {
             }
             Some(ResolutionEvent::Loaded(rf)) = resolution_rx.recv() => {
                 info!(count = rf.resolutions.len(), "processing conflict resolutions");
-                let unblocked = resolution_executor::apply(&rf.resolutions, &status_tx).await;
+                let result = resolution_executor::apply(&rf.resolutions, &status_tx).await;
 
-                let empty = onedrive_mount::resolution::ResolutionFile::default();
-                if let Err(e) = empty.save(&onedrive_mount::paths::conflict_resolutions_file()) {
-                    warn!(error = %e, "failed to clear conflict-resolutions.toml");
+                let remaining = onedrive_mount::resolution::ResolutionFile {
+                    resolutions: result.failed,
+                };
+                if let Err(e) = remaining.save(&onedrive_mount::paths::conflict_resolutions_file()) {
+                    warn!(error = %e, "failed to save remaining conflict-resolutions.toml");
                 }
 
-                for (remote, rule) in &unblocked {
+                for (remote, rule) in &result.unblocked {
                     info!(remote = %remote, rule = %rule, "re-triggering sync after conflict resolution");
                     scheduler.trigger_sync_now(remote, rule);
                 }
@@ -241,18 +243,27 @@ async fn reload(
                     .sync_rules
                     .iter()
                     .filter(|r| r.enabled)
-                    .map(|r| SyncRuleStatus {
-                        name: r.name.clone(),
-                        last_sync: rs
+                    .map(|r| {
+                        let old_status = rs
                             .sync_rules
                             .iter()
-                            .find(|s| s.name == r.name)
-                            .and_then(|s| s.last_sync),
-                        next_sync: None,
-                        state: SyncState::Idle,
-                        files_transferred: None,
-                        bytes_transferred: None,
-                        conflicts: vec![],
+                            .find(|s| s.name == r.name);
+                        SyncRuleStatus {
+                            name: r.name.clone(),
+                            last_sync: old_status.and_then(|s| s.last_sync),
+                            next_sync: None,
+                            state: old_status
+                                .filter(|s| s.state.is_blocked())
+                                .map(|s| s.state.clone())
+                                .unwrap_or(SyncState::Idle),
+                            files_transferred: old_status
+                                .and_then(|s| s.files_transferred),
+                            bytes_transferred: old_status
+                                .and_then(|s| s.bytes_transferred),
+                            conflicts: old_status
+                                .map(|s| s.conflicts.clone())
+                                .unwrap_or_default(),
+                        }
                     })
                     .collect();
             }

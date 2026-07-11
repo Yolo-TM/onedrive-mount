@@ -7,6 +7,7 @@ use onedrive_mount::{
     status::{ConflictEntry, DaemonStatus, SyncState},
     sync_baseline::SyncBaseline,
 };
+use std::collections::VecDeque;
 use std::time::Duration;
 use tokio::sync::watch;
 use tracing::warn;
@@ -79,7 +80,11 @@ async fn run_inner(
 
     match rule.sync_strategy {
         SyncStrategy::Bidirectional => {
-            rename_conflicts(local, remote, remote_name, rule, status_tx).await?;
+            let blocked =
+                rename_conflicts(local, remote, remote_name, rule, status_tx).await?;
+            if blocked {
+                return Ok(stats);
+            }
             stats.add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::Normal, true).await?);
             stats
                 .add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Normal, false).await?);
@@ -192,7 +197,7 @@ async fn rename_conflicts(
     remote_name: &str,
     rule: &SyncRule,
     status_tx: &watch::Sender<DaemonStatus>,
-) -> Result<()> {
+) -> Result<bool> {
     let cmd = crate::rclone::check_command(remote, &local.to_string_lossy(), &rule.patterns);
     let output = tokio::process::Command::from(cmd)
         .output()
@@ -208,7 +213,7 @@ async fn rename_conflicts(
         .collect();
 
     if differing.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     let baseline_path = sync_baseline_file(remote_name, &rule.name);
@@ -239,6 +244,18 @@ async fn rename_conflicts(
         let (remote_size, remote_mtime) = fetch_remote_meta(&remote_file_path).await;
 
         if has_baseline {
+            // If this specific file has no baseline entry, it's a new file — not a conflict.
+            // New files appear in `rclone check --differ` output because they only exist on one
+            // side, but they should be handled by the copy steps, not conflict resolution.
+            if !baseline.files.contains_key(relative_path) {
+                tracing::debug!(
+                    rule = %rule.name,
+                    file = %relative_path,
+                    "file not in baseline — new file, skipping conflict detection"
+                );
+                continue;
+            }
+
             let local_changed = !baseline.is_unchanged(relative_path, local_mtime);
             let remote_changed = !baseline.is_unchanged(relative_path, remote_mtime);
 
@@ -313,9 +330,10 @@ async fn rename_conflicts(
                 rule_status.state = SyncState::BlockedOnConflicts { since: Utc::now() };
             }
         });
+        return Ok(true);
     }
 
-    Ok(())
+    Ok(false)
 }
 
 async fn update_baseline(
@@ -327,7 +345,12 @@ async fn update_baseline(
     let baseline_path = sync_baseline_file(remote_name, &rule.name);
     let mut baseline = SyncBaseline::load(&baseline_path);
 
-    if let Ok(mut read_dir) = tokio::fs::read_dir(local).await {
+    let mut queue = VecDeque::new();
+    queue.push_back(local.to_path_buf());
+    while let Some(dir) = queue.pop_front() {
+        let Ok(mut read_dir) = tokio::fs::read_dir(&dir).await else {
+            continue;
+        };
         while let Ok(Some(entry)) = read_dir.next_entry().await {
             let path = entry.path();
             let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -337,6 +360,10 @@ async fn update_baseline(
             let Ok(meta) = tokio::fs::metadata(&path).await else {
                 continue;
             };
+            if meta.is_dir() {
+                queue.push_back(path);
+                continue;
+            }
             if !meta.is_file() {
                 continue;
             }
@@ -363,6 +390,7 @@ async fn update_baseline(
 
     let output = tokio::process::Command::new("rclone")
         .arg("lsjson")
+        .arg("--recursive")
         .arg(remote)
         .output()
         .await;
@@ -373,7 +401,11 @@ async fn update_baseline(
         && let Some(files) = arr.as_array()
     {
         for f in files {
-            let Some(name) = f.get("Name").and_then(|v| v.as_str()) else {
+            let Some(name) = f
+                .get("Path")
+                .and_then(|v| v.as_str())
+                .or_else(|| f.get("Name").and_then(|v| v.as_str()))
+            else {
                 continue;
             };
             if baseline.files.contains_key(name) {

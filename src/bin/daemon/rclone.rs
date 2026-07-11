@@ -17,6 +17,9 @@ fn sanitize_flag(value: &str, field: &str) -> String {
 
 #[allow(clippy::suspicious_command_arg_space)]
 fn add_filter_args(cmd: &mut Command, patterns: &[String]) {
+    if patterns.is_empty() {
+        return;
+    }
     for p in patterns {
         cmd.arg("--filter").arg(format!("+ {p}"));
     }
@@ -26,6 +29,9 @@ fn add_filter_args(cmd: &mut Command, patterns: &[String]) {
 #[allow(clippy::suspicious_command_arg_space)]
 fn add_filter_args_excluding_conflicts(cmd: &mut Command, patterns: &[String]) {
     cmd.arg("--filter").arg("- *.conflict-*");
+    if patterns.is_empty() {
+        return;
+    }
     for p in patterns {
         cmd.arg("--filter").arg(format!("+ {p}"));
     }
@@ -64,7 +70,9 @@ pub fn mount_command(remote: &RemoteConfig, log: &LogConfig) -> Command {
         ))
         .arg(format!(
             "--log-file={}",
-            onedrive_mount::paths::expand_tilde(&log.file).display()
+            onedrive_mount::paths::expand_tilde(&log.file)
+                .with_file_name("rclone-mount.log")
+                .display()
         ))
         .arg(format!(
             "--log-level={}",

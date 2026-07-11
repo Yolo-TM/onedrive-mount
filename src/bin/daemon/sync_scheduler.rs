@@ -46,6 +46,7 @@ impl SyncScheduler {
                 let handle = tokio::spawn(async move {
                     let mut timer = tokio::time::interval(interval);
                     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                    timer.tick().await; // consume the immediate first tick
 
                     const ZERO_TRANSFER_WARN_THRESHOLD: u32 = 3;
                     let mut consecutive_zero_transfers: u32 = 0;
@@ -208,11 +209,16 @@ async fn run_with_retry(
             }
         }
 
-        match sync_executor::run(remote_name, rule, status_tx).await {
-            Ok(outcome) => return Some(Ok(outcome)),
-            Err(e) => {
-                warn!(remote = %remote_name, rule = %rule.name, error = %e, "sync attempt failed");
-                last_err = Some(e);
+        tokio::select! {
+            _ = cancel.cancelled() => return None,
+            result = sync_executor::run(remote_name, rule, status_tx) => {
+                match result {
+                    Ok(outcome) => return Some(Ok(outcome)),
+                    Err(e) => {
+                        warn!(remote = %remote_name, rule = %rule.name, error = %e, "sync attempt failed");
+                        last_err = Some(e);
+                    }
+                }
             }
         }
     }
