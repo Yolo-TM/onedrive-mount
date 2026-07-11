@@ -1,5 +1,3 @@
-// All default values in one place so callers never embed magic strings
-
 pub fn remote_type() -> String {
     "onedrive".into()
 }
@@ -60,8 +58,6 @@ pub fn rule_enabled() -> bool {
     false
 }
 
-/// Parses an interval string like "30s", "5m", "2h" into seconds.
-/// Returns None for unrecognised formats.
 pub fn parse_interval_secs(s: &str) -> Option<u64> {
     let s = s.trim();
     let secs = if let Some(n) = s.strip_suffix('s') {

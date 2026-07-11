@@ -1,11 +1,6 @@
-// Constructs rclone command lines from typed config so callers never build strings by hand
-
 use onedrive_mount::config::{LogConfig, RemoteConfig};
 use std::process::Command;
 
-/// Rejects strings that contain shell metacharacters or control characters.
-/// Config values are passed directly as argv entries (not via a shell), so the
-/// actual injection risk is low, but we still want to catch accidental garbage.
 fn sanitize_flag(value: &str, field: &str) -> String {
     let bad: &[char] = &[';', '&', '|', '`', '$', '>', '<', '\n', '\r', '\0'];
     if value.chars().any(|c| bad.contains(&c)) {
@@ -20,12 +15,6 @@ fn sanitize_flag(value: &str, field: &str) -> String {
     }
 }
 
-/// Appends `--filter` arguments for the given include patterns.
-/// Uses `--filter "+ <pattern>"` for each pattern, then `--filter "- *"` to exclude everything
-/// else. This avoids the indeterminate ordering problem of mixing `--include` and `--exclude`.
-///
-/// Note: rclone `--filter` takes a single argument with an embedded space (e.g. `"- *"`).
-/// This is intentional, not a split-argument bug.
 #[allow(clippy::suspicious_command_arg_space)]
 fn add_filter_args(cmd: &mut Command, patterns: &[String]) {
     for p in patterns {
@@ -34,8 +23,6 @@ fn add_filter_args(cmd: &mut Command, patterns: &[String]) {
     cmd.arg("--filter").arg("- *");
 }
 
-/// Appends filter args for bidirectional sync: includes the user patterns
-/// but always excludes `.conflict-*` files so they stay local only.
 #[allow(clippy::suspicious_command_arg_space)]
 fn add_filter_args_excluding_conflicts(cmd: &mut Command, patterns: &[String]) {
     cmd.arg("--filter").arg("- *.conflict-*");
@@ -85,7 +72,6 @@ pub fn mount_command(remote: &RemoteConfig, log: &LogConfig) -> Command {
         ));
 
     for flag in &remote.mount.extra_flags {
-        // Extra flags are passed as individual argv entries — still sanitize
         let clean = sanitize_flag(flag, "mount.extra_flags");
         if !clean.is_empty() {
             cmd.arg(clean);
@@ -95,9 +81,6 @@ pub fn mount_command(remote: &RemoteConfig, log: &LogConfig) -> Command {
     cmd
 }
 
-/// Copies files from `src` to `dst`.
-/// `mode` controls update/ignore-existing behaviour.
-/// `exclude_conflicts` adds a filter to keep `.conflict-*` files local only.
 pub fn copy_command(
     src: &str,
     dst: &str,
@@ -127,8 +110,6 @@ pub fn copy_command(
     cmd
 }
 
-/// Syncs `src` to `dst`, making `dst` an exact replica of `src`.
-/// Destructive: deletes files in `dst` that don't exist in `src`.
 pub fn sync_command(src: &str, dst: &str, patterns: &[String]) -> Command {
     let mut cmd = Command::new("rclone");
     cmd.arg("sync").arg(src).arg(dst);
@@ -138,9 +119,6 @@ pub fn sync_command(src: &str, dst: &str, patterns: &[String]) -> Command {
     cmd
 }
 
-/// Lists files that differ between `remote` and `local` for conflict detection.
-/// Uses `--differ -` to write differing filenames to stdout (one per line, no prefix).
-/// Exit code is non-zero when differences exist — that's expected, not an error.
 pub fn check_command(remote: &str, local: &str, patterns: &[String]) -> Command {
     let mut cmd = Command::new("rclone");
     cmd.arg("check")
@@ -154,11 +132,8 @@ pub fn check_command(remote: &str, local: &str, patterns: &[String]) -> Command 
     cmd
 }
 
-/// Sends a desktop notification about sync conflicts. Fire-and-forget — the daemon
-/// never blocks on this. Returns false if no DISPLAY is available.
-#[allow(dead_code)] // Infrastructure for Phase 2 conflict detection wiring
+#[allow(dead_code)]
 pub fn notify_conflicts(rule_name: &str, count: usize) -> bool {
-    // Check for a display server
     if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
         return false;
     }
@@ -177,11 +152,9 @@ pub fn notify_conflicts(rule_name: &str, count: usize) -> bool {
         .stderr(std::process::Stdio::null())
         .spawn();
 
-    result.is_ok() // fire and forget — don't wait on the child
+    result.is_ok()
 }
 
-/// Run `fusermount -u` (or `fusermount3 -u`) on the given mount point.
-/// Returns once the unmount has completed (or failed).
 pub async fn fusermount(mount_point: &std::path::Path) {
     let _ = tokio::process::Command::new(fusermount_binary())
         .arg("-u")
@@ -192,7 +165,6 @@ pub async fn fusermount(mount_point: &std::path::Path) {
         .await;
 }
 
-/// Returns "fusermount3" if available, otherwise "fusermount". Result is cached.
 fn fusermount_binary() -> &'static str {
     use std::sync::OnceLock;
     static BINARY: OnceLock<&'static str> = OnceLock::new();
@@ -214,10 +186,7 @@ fn fusermount_binary() -> &'static str {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CopyMode {
-    /// No special flags — copy everything, overwrite if src is different.
     Normal,
-    /// `--update` — skip files where the destination is newer.
     Update,
-    /// `--ignore-existing` — skip files that already exist on the destination.
     IgnoreExisting,
 }

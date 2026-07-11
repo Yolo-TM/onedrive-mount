@@ -1,5 +1,3 @@
-// Overview page: per-remote mount status, mount point directory listing, and sync rule states
-
 use eframe::egui;
 use onedrive_mount::{
     config::{Config, RemoteConfig},
@@ -28,7 +26,6 @@ pub fn show(
         return;
     };
 
-    // Version header
     ui.horizontal(|ui| {
         ui.weak(format!("GUI v{}", env!("CARGO_PKG_VERSION")));
         ui.separator();
@@ -69,7 +66,6 @@ fn show_remote(
 ) {
     let mount_state = status.map(|s| &s.mount);
 
-    // Header row: remote name + mount state badge
     ui.horizontal(|ui| {
         ui.heading(&cfg.name);
         ui.add_space(8.0);
@@ -103,7 +99,6 @@ fn show_remote(
 
     ui.add_space(4.0);
 
-    // Directory listing — only meaningful when mounted
     let is_mounted = matches!(mount_state, Some(MountState::Mounted { .. }));
     if is_mounted {
         show_dir_listing(ui, &mount_point);
@@ -111,7 +106,6 @@ fn show_remote(
         ui.weak("(not mounted)");
     }
 
-    // Sync rules
     if let Some(rs) = status
         && !rs.sync_rules.is_empty()
     {
@@ -145,7 +139,6 @@ fn show_remote(
                     ui.weak(format!("next: {}", local_next.format("%H:%M:%S")));
                 }
 
-                // Show transfer stats from last successful sync
                 if let Some(files) = rule.files_transferred {
                     let bytes_str = rule.bytes_transferred.map(format_size).unwrap_or_default();
                     ui.weak(format!("{files} file(s), {bytes_str}"));
@@ -165,7 +158,6 @@ fn show_dir_listing(ui: &mut egui::Ui, path: &PathBuf) {
         return;
     }
 
-    // Show up to 32 entries — enough to be useful without flooding the panel
     const MAX_ENTRIES: usize = 32;
     let shown = entries.len().min(MAX_ENTRIES);
 
@@ -210,7 +202,6 @@ fn read_dir_entries(path: &PathBuf) -> Vec<DirEntry> {
         .filter_map(|e| e.ok())
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
-            // Skip hidden files
             if name.starts_with('.') {
                 return None;
             }
@@ -221,7 +212,6 @@ fn read_dir_entries(path: &PathBuf) -> Vec<DirEntry> {
         })
         .collect();
 
-    // Dirs first, then files, both alphabetical
     entries.sort_unstable_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
 
     entries

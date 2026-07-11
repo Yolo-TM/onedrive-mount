@@ -1,5 +1,3 @@
-// Spawns one tokio task per sync rule, each sleeping until its configured interval elapses
-
 use crate::sync_executor;
 use onedrive_mount::{
     config::RemoteConfig,
@@ -12,18 +10,14 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, warn};
 
-/// Maximum number of consecutive retries before giving up until the next scheduled interval.
 const MAX_RETRIES: u32 = 3;
-/// Base delay for exponential backoff: 30s, 60s, 120s.
 const RETRY_BASE_SECS: u64 = 30;
 
-/// Key identifying a specific sync rule: (remote_name, rule_name)
 type RuleKey = (String, String);
 
 pub struct SyncScheduler {
     handles: Vec<JoinHandle<()>>,
     cancel: CancellationToken,
-    /// Per-rule channels to trigger an immediate sync without restarting the scheduler
     sync_now_txs: HashMap<RuleKey, mpsc::Sender<()>>,
 }
 
@@ -45,7 +39,6 @@ impl SyncScheduler {
                 let status_tx = status_tx.clone();
                 let cancel = self.cancel.clone();
 
-                // Channel for immediate sync triggers (Sync Now button)
                 let (sync_now_tx, mut sync_now_rx) = mpsc::channel::<()>(1);
                 let key = (remote_name.clone(), rule.name.clone());
                 self.sync_now_txs.insert(key, sync_now_tx);
@@ -54,17 +47,14 @@ impl SyncScheduler {
                     let mut timer = tokio::time::interval(interval);
                     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
-                    /// Consecutive successful syncs with 0 files transferred before warning.
                     const ZERO_TRANSFER_WARN_THRESHOLD: u32 = 3;
                     let mut consecutive_zero_transfers: u32 = 0;
 
                     loop {
-                        // Publish next scheduled run time before sleeping
                         let next = chrono::Utc::now()
                             + chrono::Duration::from_std(interval).unwrap_or_default();
                         update_next_sync(&status_tx, &remote_name, &rule.name, next);
 
-                        // Wait for either the interval to fire or a manual trigger
                         let triggered_manually = tokio::select! {
                             _ = cancel.cancelled() => break,
                             _ = timer.tick() => false,
@@ -73,11 +63,9 @@ impl SyncScheduler {
 
                         if triggered_manually {
                             tracing::debug!(remote = %remote_name, rule = %rule.name, "manual sync triggered");
-                            // Reset the timer so the next automatic sync is a full interval away
                             timer.reset();
                         }
 
-                        // Skip sync if rule is blocked on unresolved conflicts
                         let is_blocked = {
                             let s = status_tx.borrow();
                             s.remotes
@@ -113,7 +101,6 @@ impl SyncScheduler {
                                     "sync succeeded"
                                 );
 
-                                // Track consecutive zero-transfer cycles for bidirectional rules
                                 if outcome.files_transferred == 0 {
                                     consecutive_zero_transfers += 1;
                                     if consecutive_zero_transfers >= ZERO_TRANSFER_WARN_THRESHOLD
@@ -132,22 +119,19 @@ impl SyncScheduler {
                                 }
 
                                 status_tx.send_modify(|s| {
-                                    set_rule_state(
-                                        s,
-                                        &remote_name,
-                                        &rule.name,
-                                        SyncState::Succeeded,
-                                        Some(outcome.at),
-                                    );
                                     if let Some(remote) =
                                         s.remotes.iter_mut().find(|r| r.name == remote_name)
-                                        && let Some(rule) = remote
+                                        && let Some(sr) = remote
                                             .sync_rules
                                             .iter_mut()
                                             .find(|r| r.name == rule.name)
                                     {
-                                        rule.files_transferred = Some(outcome.files_transferred);
-                                        rule.bytes_transferred = Some(outcome.bytes_transferred);
+                                        if !sr.state.is_blocked() {
+                                            sr.state = SyncState::Succeeded;
+                                        }
+                                        sr.last_sync = Some(outcome.at);
+                                        sr.files_transferred = Some(outcome.files_transferred);
+                                        sr.bytes_transferred = Some(outcome.bytes_transferred);
                                     }
                                 });
                             }
@@ -167,8 +151,6 @@ impl SyncScheduler {
                                     )
                                 });
                             }
-                            // Cancelled mid-sync: reset to Idle so the GUI doesn't
-                            // show "Running" forever after a config reload or shutdown.
                             None => {
                                 status_tx.send_modify(|s| {
                                     set_rule_state(
@@ -190,12 +172,9 @@ impl SyncScheduler {
         }
     }
 
-    /// Triggers an immediate sync for a specific rule without affecting other rules.
-    /// Returns false if the rule is not currently scheduled.
     pub fn trigger_sync_now(&self, remote_name: &str, rule_name: &str) -> bool {
         let key = (remote_name.to_string(), rule_name.to_string());
         if let Some(tx) = self.sync_now_txs.get(&key) {
-            // try_send: if the channel is already full (a trigger is already pending) that's fine
             tx.try_send(()).is_ok()
         } else {
             false
@@ -208,13 +187,10 @@ impl SyncScheduler {
             let _ = handle.await;
         }
         self.sync_now_txs.clear();
-        // Fresh token so the scheduler can be restarted after a config reload
         self.cancel = CancellationToken::new();
     }
 }
 
-/// Runs the sync, retrying up to MAX_RETRIES times with exponential backoff.
-/// Returns None if cancelled during a retry sleep.
 async fn run_with_retry(
     remote_name: &str,
     rule: &onedrive_mount::config::SyncRule,

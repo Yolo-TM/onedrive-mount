@@ -1,5 +1,3 @@
-// Root egui application: sidebar navigation and content dispatch
-
 use crate::{
     config_io,
     rclone_config_wizard::Wizard,
@@ -24,11 +22,8 @@ enum Nav {
 pub struct App {
     state: State,
     nav: Nav,
-    /// True after the first frame — daemon auto-start runs once on startup
     did_startup: bool,
-    /// Set after a start attempt so the status bar shows "Starting…" until confirmed active
     daemon_starting: bool,
-    /// PID lock kept alive for the process lifetime
     _pid_lock: onedrive_mount::pid_lock::PidLock,
 }
 
@@ -58,11 +53,8 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
 
-        // Check if background remotes list has loaded
         self.state.poll_remotes_loading();
 
-        // On the very first frame: refresh systemd state and auto-start the daemon
-        // when the service is installed but not currently active.
         if !self.did_startup {
             self.did_startup = true;
             self.state.daemon_active = systemd::is_active();
@@ -75,8 +67,6 @@ impl eframe::App for App {
             }
         }
 
-        // While the daemon is starting, poll every 500ms so the UI updates promptly.
-        // Once confirmed active, revert to the normal 2s interval.
         let poll_interval = if self.daemon_starting {
             Duration::from_millis(500)
         } else {
@@ -93,7 +83,6 @@ impl eframe::App for App {
             if self.daemon_starting && self.state.daemon_active {
                 self.daemon_starting = false;
             }
-            // If the service is installed but not running, surface the last journal error
             if self.state.service_enabled
                 && !self.state.daemon_active
                 && !self.daemon_starting
@@ -105,19 +94,16 @@ impl eframe::App for App {
         }
         ctx.request_repaint_after(poll_interval);
 
-        // Expire save toast after TOAST_DURATION
         if let Some((_, ts)) = &self.state.save_toast
             && ts.elapsed() > TOAST_DURATION
         {
             self.state.save_toast = None;
         }
 
-        // Wizard shown as a modal overlay when active
         if self.state.wizard.is_some() {
             show_wizard_modal(&ctx, ui, &mut self.state);
         }
 
-        // Status bar at the bottom: daemon indicator, per-remote mount pills, service button
         egui::Panel::bottom("status_bar").show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 let active = self.state.daemon_active;
@@ -133,7 +119,6 @@ impl eframe::App for App {
                 };
                 ui.colored_label(color, daemon_label);
 
-                // Only show remotes that need attention (mounting or failed) — healthy mounts are noise
                 if let Some(status) = &self.state.status {
                     let now = chrono::Utc::now();
                     for remote in &status.remotes {
@@ -163,17 +148,14 @@ impl eframe::App for App {
                     }
                 }
 
-                // Push save + service controls to the right
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     service::show_controls(ui, self.state.service_enabled, &mut self.state.service_error);
 
-                    // Config parse error from daemon (e.g. user hand-edited config.toml to invalid TOML)
                     if let Some(cfg_err) = self.state.status.as_ref().and_then(|s| s.config_error.as_ref()) {
                         ui.colored_label(egui::Color32::RED, format!("⚠ Config error: {cfg_err}"))
                             .on_hover_text("The daemon detected an invalid config file and kept its previous configuration. Fix config.toml and save again.");
                     }
 
-                    // Error messages — show persistently until dismissed
                     if let Some(err) = &self.state.service_error {
                         let resp = ui.colored_label(egui::Color32::RED, err);
                         if resp.clicked() {
@@ -182,7 +164,6 @@ impl eframe::App for App {
                         resp.on_hover_text("Click to dismiss");
                     }
 
-                    // Save toast (success feedback)
                     if let Some((msg, _)) = &self.state.save_toast {
                         ui.colored_label(egui::Color32::GREEN, msg);
                     }
@@ -220,7 +201,6 @@ impl eframe::App for App {
             ui.selectable_value(&mut self.nav, Nav::Remotes, "Remotes");
             ui.selectable_value(&mut self.nav, Nav::Logging, "Logging");
 
-            // Show Conflicts tab with badge when conflicts exist
             let conflict_count = self
                 .state
                 .status
@@ -285,7 +265,6 @@ fn show_wizard_modal(ctx: &egui::Context, _ui: &mut egui::Ui, state: &mut State)
 
         let done = wizard::show(ui, w);
         if done {
-            // Refresh rclone remote list in background and offer to add the new remote
             let remotes = rclone_query::list_remotes();
             state.available_remotes = remotes;
             state.wizard = None;
@@ -295,15 +274,12 @@ fn show_wizard_modal(ctx: &egui::Context, _ui: &mut egui::Ui, state: &mut State)
         ui.add_space(16.0);
         ui.separator();
         if ui.button("✕ Cancel").clicked() {
-            // If rclone already created the remote (wizard progressed past Init),
-            // offer to clean it up rather than leaving an orphan.
             if let Some(w) = &state.wizard
                 && w.step != crate::rclone_config_wizard::WizardStep::Init
                 && !w.remote_name.is_empty()
             {
                 let name = w.remote_name.clone();
                 state.wizard = None;
-                // Delete the partial remote silently; surface error if it fails
                 if let Err(e) = rclone_query::delete_remote(&name) {
                     state.service_error = Some(format!(
                         "Cancelled — could not clean up partial remote '{name}': {e}"
@@ -316,14 +292,12 @@ fn show_wizard_modal(ctx: &egui::Context, _ui: &mut egui::Ui, state: &mut State)
             state.wizard = None;
         }
     });
-    // Clicking outside the modal also closes it
     if modal.should_close() {
         state.wizard = None;
     }
 }
 
 fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
-    // Configured remotes — each row is clickable to expand the editor below
     if !state.config.remotes.is_empty() {
         ui.label(egui::RichText::new("Configured remotes").small().weak());
         ui.add_space(2.0);
@@ -351,7 +325,6 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
                 }
             });
 
-            // Inline editor — expands directly under the selected remote
             if selected {
                 ui.indent(format!("remote_editor_{i}"), |ui| {
                     if remote::show(
@@ -377,7 +350,6 @@ fn show_remotes(ui: &mut egui::Ui, state: &mut State) {
         ui.add_space(8.0);
     }
 
-    // rclone remotes not yet in the app config
     let configured_names: Vec<_> = state
         .config
         .remotes

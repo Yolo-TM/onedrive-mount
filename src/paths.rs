@@ -1,5 +1,3 @@
-// XDG-compliant paths so all components agree on file locations
-
 use std::path::PathBuf;
 
 pub fn config_dir() -> PathBuf {
@@ -34,7 +32,13 @@ pub fn conflict_resolutions_file() -> PathBuf {
     data_dir().join("conflict-resolutions.toml")
 }
 
-/// Expands a leading `~` to the user's home directory.
+pub fn sync_baseline_file(remote_name: &str, rule_name: &str) -> PathBuf {
+    data_dir()
+        .join("baseline")
+        .join(remote_name)
+        .join(format!("{rule_name}.toml"))
+}
+
 pub fn expand_tilde(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         dirs::home_dir()

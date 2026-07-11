@@ -1,5 +1,3 @@
-// Log configuration editor plus a live tail of the last N lines of the log file
-
 use crate::widgets::labeled_field;
 use eframe::egui;
 use onedrive_mount::{config::LogConfig, paths::expand_tilde};
@@ -8,7 +6,6 @@ use std::time::SystemTime;
 const LOG_LEVELS: &[&str] = &["DEBUG", "INFO", "NOTICE", "ERROR"];
 const TAIL_LINES: usize = 30;
 
-/// Cached log tail: only re-read from disk when the file's mtime changes.
 pub struct LogTailCache {
     pub content: String,
     last_mtime: Option<SystemTime>,
@@ -24,9 +21,7 @@ impl LogTailCache {
         }
     }
 
-    /// Refreshes the cache if the file has changed since the last read.
     pub fn refresh(&mut self, path: &std::path::Path) {
-        // If the configured path changed, invalidate immediately
         if self.last_path != path {
             self.last_path = path.to_owned();
             self.last_mtime = None;
@@ -35,7 +30,7 @@ impl LogTailCache {
         let mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());
 
         if mtime == self.last_mtime && self.last_mtime.is_some() {
-            return; // file unchanged
+            return;
         }
 
         self.last_mtime = mtime;

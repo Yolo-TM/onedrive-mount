@@ -1,6 +1,3 @@
-// Watches conflict-resolutions.toml and sends parsed resolutions when it changes.
-// Uses the same debounced inotify pattern as config_watcher.
-
 use anyhow::Result;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use onedrive_mount::{paths::conflict_resolutions_file, resolution::ResolutionFile};
@@ -56,9 +53,7 @@ impl ResolutionWatcher {
                         );
                         let _ = sender.send(ResolutionEvent::Loaded(rf)).await;
                     }
-                    Some(_) => {
-                        // File is valid but empty — nothing to do
-                    }
+                    Some(_) => {}
                     None => {
                         warn!("failed to parse conflict-resolutions.toml");
                     }

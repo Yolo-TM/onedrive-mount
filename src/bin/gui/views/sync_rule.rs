@@ -1,12 +1,7 @@
-// Editor for a single sync rule nested inside its remote
-
 use crate::widgets::{interval_input, labeled_field};
 use eframe::egui;
 use onedrive_mount::{config::SyncRule, conflict::SyncStrategy};
 
-/// Returns `true` when any field changed.
-/// `id` must be a stable value (e.g. the rule's index) — NOT the rule name,
-/// which changes while the user types and would reset widget state mid-edit.
 pub fn show(ui: &mut egui::Ui, rule: &mut SyncRule, id: usize) -> bool {
     let mut changed = false;
 

@@ -1,5 +1,3 @@
-// Editor for a single remote: connection settings, mount options, and its sync rules
-
 use crate::widgets::{interval_input, labeled_field};
 use eframe::egui;
 use onedrive_mount::{
@@ -7,8 +5,6 @@ use onedrive_mount::{
     status::DaemonStatus,
 };
 
-/// Returns `true` when any field changed.
-/// `error` receives any error that should be surfaced to the user (e.g. sync_now failure).
 pub fn show(
     ui: &mut egui::Ui,
     remote: &mut RemoteConfig,
@@ -89,7 +85,6 @@ pub fn show(
     ui.add_space(8.0);
     ui.heading("Sync rules");
 
-    // Look up the current sync status for this remote (for state display + Sync Now)
     let remote_status = daemon_status
         .as_ref()
         .and_then(|s| s.remotes.iter().find(|r| r.name == remote.name));
@@ -104,7 +99,6 @@ pub fn show(
                     changed = true;
                 }
 
-                // Show sync state badge if daemon is running
                 if let Some(rs) = remote_status
                     && let Some(rule_status) = rs.sync_rules.iter().find(|s| s.name == rule.name)
                 {
@@ -115,8 +109,6 @@ pub fn show(
                     );
                 }
 
-                // Use a stable egui ID (index) for the collapsing header so that
-                // renaming the rule doesn't collapse it or reset widget state mid-edit.
                 egui::CollapsingHeader::new(&rule.name)
                     .id_salt(("rule_header", i))
                     .show(ui, |ui| {
@@ -127,7 +119,6 @@ pub fn show(
                                 rule_to_remove = Some(i);
                             }
 
-                            // Sync Now — only available when the daemon is running
                             if let Some(pid) = daemon_pid
                                 && ui.button("⟳ Sync now")
                                     .on_hover_text("Trigger an immediate sync for all enabled rules across all remotes")

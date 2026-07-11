@@ -1,7 +1,3 @@
-// Watches config.toml with inotify and sends parsed configs when it changes.
-// Events are debounced: rapid saves (e.g. from editor atomic writes) are coalesced
-// into a single reload by waiting 200 ms after the last event before parsing.
-
 use anyhow::Result;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use onedrive_mount::{config::Config, paths::config_file};
@@ -10,9 +6,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 pub enum ConfigEvent {
-    /// A valid config was loaded — apply it.
     Loaded(Config),
-    /// The file changed but failed to parse — surface to user, keep old config.
     ParseError(String),
 }
 
@@ -30,8 +24,6 @@ impl ConfigWatcher {
 
         let pending: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
 
-        // Capture the runtime handle so we can spawn tasks from the notify callback thread,
-        // which runs outside the Tokio runtime.
         let handle = tokio::runtime::Handle::current();
         let watch_path = path.clone();
 

@@ -17,10 +17,6 @@ fn main() -> eframe::Result {
 
     let resolve_conflicts = args.iter().any(|a| a == "--resolve-conflicts");
 
-    // winit prefers Wayland when WAYLAND_DISPLAY is set, but the Wayland libs may not be
-    // available in the dynamic linker path (common on NixOS). Force X11 so winit uses the
-    // statically-discovered libX11 instead of trying to dlopen libwayland-client.
-    // Safety: called before any threads are spawned, so no other thread can observe the env.
     unsafe {
         std::env::remove_var("WAYLAND_DISPLAY");
         std::env::remove_var("WAYLAND_SOCKET");

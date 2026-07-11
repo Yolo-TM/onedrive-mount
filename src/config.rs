@@ -1,5 +1,3 @@
-// The single source of truth for all user-facing settings shared between GUI and daemon
-
 use crate::{conflict::SyncStrategy, defaults};
 use serde::{Deserialize, Serialize};
 
@@ -108,8 +106,6 @@ impl Config {
         Ok(())
     }
 
-    /// Returns a list of human-readable validation errors.
-    /// An empty vec means the config is valid to save.
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
 

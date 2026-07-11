@@ -1,5 +1,3 @@
-// Unit tests for rclone command builder
-
 use crate::rclone::{self, CopyMode};
 use onedrive_mount::config::{LogConfig, MountConfig, RemoteConfig};
 
@@ -71,7 +69,6 @@ fn copy_command_uses_filter_not_include() {
     let patterns = vec!["*.kdbx".to_string(), "*.pdf".to_string()];
     let cmd = rclone::copy_command("src:", "dst/", &patterns, CopyMode::Normal, false);
     let args = args_of(&cmd);
-    // Must use --filter, not --include
     assert!(!args.contains(&"--include".to_string()));
     assert!(args.contains(&"--filter".to_string()));
     assert!(args.contains(&"+ *.kdbx".to_string()));
@@ -114,13 +111,11 @@ fn check_command_uses_filter_not_include() {
 
 #[test]
 fn sanitize_rejects_metacharacters() {
-    // Mount a remote whose name contains a shell metachar — should produce empty remote arg
     let mut remote = default_remote();
     remote.name = "evil;rm -rf /".into();
     let cmd = rclone::mount_command(&remote, &default_log());
     let args = args_of(&cmd);
-    // The remote arg should be ":" (empty name sanitized away, colon kept by format string)
-    let remote_arg = &args[1]; // first arg after "mount"
+    let remote_arg = &args[1];
     assert!(
         !remote_arg.contains(';'),
         "sanitized name must not contain ';'"

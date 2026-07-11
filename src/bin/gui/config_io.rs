@@ -1,16 +1,11 @@
-// Loads and saves config.toml — missing file is treated as an empty config, not an error
-
 use onedrive_mount::{config::Config, paths::config_file};
 
 pub enum LoadResult {
     Ok(Config),
-    /// The file exists but could not be parsed — the raw error message is included.
     ParseError(String),
-    /// The file doesn't exist yet — first launch.
     Missing,
 }
 
-/// Returns the full load result so callers can surface parse errors to the user.
 pub fn load_result() -> LoadResult {
     let path = config_file();
     if !path.exists() {

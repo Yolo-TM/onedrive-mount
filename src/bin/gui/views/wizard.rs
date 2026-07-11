@@ -1,5 +1,3 @@
-// Step-by-step rclone remote creation wizard — answers rclone's JSON questions in-app
-
 use crate::rclone_config_wizard::{RcloneExample, RcloneOption, Wizard, WizardStep};
 use eframe::egui;
 
@@ -14,7 +12,6 @@ const KNOWN_TYPES: &[(&str, &str)] = &[
     ("ftp", "FTP"),
 ];
 
-/// Returns `true` when the wizard completed and the remote list should be refreshed.
 pub fn show(ui: &mut egui::Ui, wizard: &mut Wizard) -> bool {
     wizard.poll();
     ui.ctx()
@@ -27,7 +24,6 @@ pub fn show(ui: &mut egui::Ui, wizard: &mut Wizard) -> bool {
             if let Some(opt) = q.option {
                 show_question(ui, wizard, &opt)
             } else {
-                // Option was null but state non-empty — treat as done
                 wizard.step = WizardStep::Done;
                 false
             }
@@ -96,7 +92,6 @@ fn show_question(ui: &mut egui::Ui, wizard: &mut Wizard, opt: &RcloneOption) -> 
     }
     ui.add_space(8.0);
 
-    // Yes/No exclusive questions: render as buttons that submit immediately on click
     if let Some(ref examples) = opt.examples {
         if is_bool_exclusive(opt, examples) {
             ui.horizontal(|ui| {
@@ -183,7 +178,6 @@ fn show_combo(ui: &mut egui::Ui, wizard: &mut Wizard, opts: &[RcloneExample], ex
             }
         });
 
-    // Non-exclusive: allow free-text override below the combo
     if !exclusive {
         ui.add_space(4.0);
         ui.label(
@@ -243,8 +237,6 @@ fn type_label(t: &str) -> &str {
         .unwrap_or(t)
 }
 
-/// rclone remote names must be non-empty and contain only alphanumeric characters,
-/// hyphens, and underscores. Spaces and shell metacharacters are not allowed.
 fn is_valid_remote_name(name: &str) -> bool {
     !name.is_empty()
         && name

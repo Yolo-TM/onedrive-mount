@@ -1,5 +1,3 @@
-// Top-level daemon: initialises all subsystems and drives the main event loop
-
 use crate::{
     config_watcher::{ConfigEvent, ConfigWatcher},
     mount_manager::MountManager,
@@ -34,7 +32,6 @@ pub async fn run(config: Config) -> Result<()> {
     let mut mount_manager = MountManager::new(config.log.clone());
     let mut scheduler = SyncScheduler::new();
 
-    // Bring all enabled remotes online at startup
     for remote in config.remotes.iter().filter(|r| r.enabled) {
         startup_remote(&mut mount_manager, &status_tx, remote).await;
     }
@@ -42,9 +39,6 @@ pub async fn run(config: Config) -> Result<()> {
 
     info!("daemon running");
 
-    // Health check interval — checks if the rclone process is still alive.
-    // We avoid statting the mount point on every tick (which triggers FUSE Attr calls
-    // and fills the log at DEBUG level). Process liveness is checked cheaply via try_wait.
     let mut health_tick = tokio::time::interval(Duration::from_secs(15));
     health_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -60,7 +54,6 @@ pub async fn run(config: Config) -> Result<()> {
             Some(event) = config_rx.recv() => {
                 match event {
                     ConfigEvent::Loaded(new_config) => {
-                        // Clear any previously reported parse error
                         status_tx.send_modify(|s| s.config_error = None);
                         reload(&mut mount_manager, &mut scheduler, &status_tx, &current_config, &new_config).await;
                         current_config = new_config;
@@ -86,13 +79,11 @@ pub async fn run(config: Config) -> Result<()> {
                 info!(count = rf.resolutions.len(), "processing conflict resolutions");
                 let unblocked = resolution_executor::apply(&rf.resolutions, &status_tx).await;
 
-                // Clear the resolutions file after processing
                 let empty = onedrive_mount::resolution::ResolutionFile::default();
                 if let Err(e) = empty.save(&onedrive_mount::paths::conflict_resolutions_file()) {
                     warn!(error = %e, "failed to clear conflict-resolutions.toml");
                 }
 
-                // Re-trigger unblocked rules
                 for (remote, rule) in &unblocked {
                     info!(remote = %remote, rule = %rule, "re-triggering sync after conflict resolution");
                     scheduler.trigger_sync_now(remote, rule);
@@ -101,11 +92,9 @@ pub async fn run(config: Config) -> Result<()> {
         }
     }
 
-    // Stop syncs before unmounting so in-flight copies finish cleanly
     scheduler.stop().await;
     mount_manager.stop_all().await;
     cancel.cancel();
-    // Wait for status_writer to flush its final shutdown state to disk
     let _ = status_writer_handle.await;
 
     Ok(())
@@ -143,10 +132,8 @@ async fn reload(
 ) {
     info!("config reloaded — applying changes");
 
-    // Stop all syncs before touching mounts to avoid partial syncs
     scheduler.stop().await;
 
-    // Remotes removed from config get unmounted
     for old_remote in &old.remotes {
         if !new.remotes.iter().any(|r| r.name == old_remote.name) {
             info!(remote = %old_remote.name, "remote removed — unmounting");
@@ -155,7 +142,6 @@ async fn reload(
         }
     }
 
-    // New or changed remotes get restarted; disabled ones get stopped
     for new_remote in &new.remotes {
         if !new_remote.enabled {
             let was_enabled = old
@@ -217,7 +203,6 @@ async fn reload(
             startup_remote(mounts, status_tx, new_remote).await;
         }
 
-        // Log sync rule changes within this remote
         if let Some(old_remote) = old.remotes.iter().find(|r| r.name == new_remote.name) {
             for old_rule in &old_remote.sync_rules {
                 if !new_remote
@@ -249,7 +234,6 @@ async fn reload(
         }
     }
 
-    // Rebuild status entries for rules that may have changed
     status_tx.send_modify(|s| {
         for remote in &new.remotes {
             if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
@@ -287,7 +271,6 @@ async fn check_mount_health(
         let state = mounts.health_check(remote).await;
         status_tx.send_modify(|s| {
             if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
-                // Only update if the state actually changed to avoid spurious status writes
                 if rs.mount != state {
                     rs.mount = state;
                 }
@@ -297,7 +280,6 @@ async fn check_mount_health(
 }
 
 fn remote_config_changed(old: &RemoteConfig, new: &RemoteConfig) -> bool {
-    // Mount options or the remote endpoint itself changed — sync rules alone don't need remount
     old.name != new.name
         || old.mount_point != new.mount_point
         || old.r#type != new.r#type
@@ -312,7 +294,6 @@ fn remote_config_changed(old: &RemoteConfig, new: &RemoteConfig) -> bool {
 }
 
 fn build_initial_status(config: &Config) -> DaemonStatus {
-    // Load previous status to restore persisted state (conflicts, last_sync times).
     let prev = onedrive_mount::status::DaemonStatus::load(&onedrive_mount::paths::status_file());
 
     DaemonStatus {
@@ -331,7 +312,6 @@ fn build_initial_status(config: &Config) -> DaemonStatus {
                     .iter()
                     .filter(|rule| rule.enabled)
                     .map(|rule| {
-                        // Restore last_sync and any unresolved conflicts from previous run
                         let prev_rule = prev.as_ref().and_then(|p| {
                             p.remotes
                                 .iter()

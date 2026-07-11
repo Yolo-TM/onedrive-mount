@@ -1,8 +1,5 @@
-// Queries rclone for configured remotes so the UI can offer them as choices
-
 use std::process::Command;
 
-/// Sends SIGUSR1 to the daemon, triggering an immediate sync of all rules.
 pub fn sync_now(daemon_pid: u32) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -42,7 +39,6 @@ pub fn list_remotes() -> Vec<String> {
 
     String::from_utf8_lossy(&output.stdout)
         .lines()
-        // rclone appends a colon to each remote name
         .map(|line| line.trim_end_matches(':').to_string())
         .filter(|s| !s.is_empty())
         .collect()

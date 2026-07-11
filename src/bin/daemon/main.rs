@@ -23,7 +23,6 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Handle --version before acquiring the PID lock so it works even if another instance runs
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("onedrive-mountd {}", env!("CARGO_PKG_VERSION"));
@@ -40,7 +39,6 @@ async fn main() -> Result<()> {
         Config::default()
     };
 
-    // Guard must be held for the process lifetime — stored in a local so Drop runs on exit
     let _logging_guard = init_logging(&config);
 
     let _lock = match PidLock::acquire(&daemon_pid_file()) {
@@ -73,9 +71,6 @@ fn check_rclone_or_exit() {
     }
 }
 
-/// Initialises logging and returns the flush guard.
-/// The caller must keep the guard alive for the process lifetime so the final
-/// log lines are flushed before the process exits.
 fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard {
     let log_path = expand_tilde(&config.log.file);
     let level = config.log.level.to_lowercase();
@@ -98,8 +93,6 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
         let _ = std::fs::create_dir_all(parent);
     }
 
-    // If the log file exceeds 10 MB, trim it to the last 5 MB (keeping a clean line boundary).
-    // We use a fixed filename (never-rolling) so the GUI always knows where to read.
     const MAX_LOG_BYTES: usize = 10 * 1024 * 1024;
     const KEEP_LOG_BYTES: usize = 5 * 1024 * 1024;
     if std::fs::metadata(&log_path)
@@ -110,7 +103,6 @@ fn init_logging(config: &Config) -> tracing_appender::non_blocking::WorkerGuard 
         && content.len() > KEEP_LOG_BYTES
     {
         let start = content.len() - KEEP_LOG_BYTES;
-        // Advance to the next newline so we don't keep a partial line at the start
         let split = content[start..]
             .iter()
             .position(|&b| b == b'\n')

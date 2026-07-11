@@ -1,5 +1,3 @@
-// Unit tests for sync_scheduler internals
-
 use crate::sync_scheduler::parse_interval;
 use std::time::Duration;
 

@@ -1,11 +1,3 @@
-// Drives rclone's --non-interactive config protocol to create a new remote without a terminal
-//
-// Every rclone call runs on a background thread so the UI never blocks. The wizard
-// shows a "Working…" spinner while a step is in flight, then transitions on the result.
-//
-// Back navigation: each answered question pushes its (state_token, question) onto a history
-// stack. "← Back" pops one entry and re-presents that question without re-running rclone.
-
 use serde::Deserialize;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -14,7 +6,6 @@ use std::sync::{Arc, Mutex};
 pub struct RcloneQuestion {
     #[serde(rename = "State")]
     pub state: String,
-    // null when State is empty (done) — we detect done before using this field
     #[serde(rename = "Option")]
     pub option: Option<RcloneOption>,
     #[serde(rename = "Error")]
@@ -59,8 +50,6 @@ pub enum WizardStep {
 
 type Pending = Arc<Mutex<Option<Result<RcloneQuestion, String>>>>;
 
-/// One entry in the back-navigation history: the rclone state token that produced this
-/// question, and the question itself so we can re-display it without re-running rclone.
 #[derive(Clone)]
 struct HistoryEntry {
     rclone_state: String,
@@ -74,7 +63,6 @@ pub struct Wizard {
     pub current_answer: String,
     rclone_state: String,
     pending: Option<Pending>,
-    /// Questions answered so far — used for back navigation
     history: Vec<HistoryEntry>,
 }
 
@@ -95,7 +83,6 @@ impl Wizard {
         !self.history.is_empty()
     }
 
-    /// Pops the last answered question back onto the screen without re-running rclone.
     pub fn go_back(&mut self) {
         if let Some(entry) = self.history.pop() {
             self.rclone_state = entry.rclone_state.clone();
@@ -117,7 +104,6 @@ impl Wizard {
     }
 
     pub fn submit_answer(&mut self) {
-        // Push current question to history before advancing
         if let WizardStep::Question(q) = &self.step {
             self.history.push(HistoryEntry {
                 rclone_state: self.rclone_state.clone(),
@@ -151,7 +137,6 @@ impl Wizard {
             return;
         }
 
-        // Empty state means rclone finished (Option is null in this case)
         if question.state.is_empty() {
             self.step = WizardStep::Done;
             return;
@@ -167,12 +152,10 @@ impl Wizard {
             }
         };
 
-        // config_is_local: always answer true (local browser), runs blocking on a thread
         if option.name == "config_is_local" {
             let state = self.rclone_state.clone();
             let name = self.remote_name.clone();
             let remote_type = self.remote_type.clone();
-            // Extract the OAuth URL from the help text; fall back to the rclone default port
             let url = extract_oauth_url(&option.help)
                 .unwrap_or_else(|| "http://127.0.0.1:53682/auth".into());
             self.step = WizardStep::WaitingOAuth { url };
@@ -199,8 +182,6 @@ impl Wizard {
     }
 }
 
-/// Extracts the OAuth callback URL from rclone's help text for the config_is_local question.
-/// rclone prints something like: "... http://127.0.0.1:53682/auth?state=... ..."
 fn extract_oauth_url(help: &str) -> Option<String> {
     help.split_whitespace()
         .find(|word| word.starts_with("http://127.0.0.1") || word.starts_with("http://localhost"))

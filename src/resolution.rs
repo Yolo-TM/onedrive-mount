@@ -1,6 +1,3 @@
-// Conflict resolution decisions written by the GUI and consumed by the daemon.
-// The GUI writes to conflict-resolutions.toml; the daemon watches it via inotify.
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;

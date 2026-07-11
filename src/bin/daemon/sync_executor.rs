@@ -1,12 +1,11 @@
-// Executes a single sync cycle for one rule, implementing each sync strategy
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use onedrive_mount::{
     config::SyncRule,
     conflict::SyncStrategy,
-    paths::expand_tilde,
+    paths::{expand_tilde, sync_baseline_file},
     status::{ConflictEntry, DaemonStatus, SyncState},
+    sync_baseline::SyncBaseline,
 };
 use std::time::Duration;
 use tokio::sync::watch;
@@ -14,8 +13,7 @@ use tracing::warn;
 
 use crate::rclone::CopyMode;
 
-/// How long a single rclone copy/check/sync invocation may run before we abort it.
-const SYNC_TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
+const SYNC_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub struct SyncOutcome {
     pub at: chrono::DateTime<Utc>,
@@ -56,7 +54,6 @@ pub async fn run(
     })
 }
 
-/// Accumulated transfer stats across all rclone invocations in a single sync cycle.
 #[derive(Default)]
 struct TransferStats {
     files: u32,
@@ -82,16 +79,13 @@ async fn run_inner(
 
     match rule.sync_strategy {
         SyncStrategy::Bidirectional => {
-            // 1. Detect conflicts (files changed on both sides), record in status
             rename_conflicts(local, remote, remote_name, rule, status_tx).await?;
-            // 2. Push local → remote (exclude .conflict-* files, they stay local only)
             stats.add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::Normal, true).await?);
-            // 3. Pull remote → local (remote version overwrites the renamed-away local)
             stats
                 .add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Normal, false).await?);
+            update_baseline(local, remote, remote_name, rule).await;
         }
         SyncStrategy::NewestWins => {
-            // 1. Push local-only new files that don't exist on remote
             stats.add(
                 &run_copy(
                     &local_str,
@@ -102,7 +96,6 @@ async fn run_inner(
                 )
                 .await?,
             );
-            // 2. Pull remote-only new files that don't exist locally
             stats.add(
                 &run_copy(
                     remote,
@@ -113,10 +106,8 @@ async fn run_inner(
                 )
                 .await?,
             );
-            // 3. Push local files where local is newer
             stats
                 .add(&run_copy(&local_str, remote, &rule.patterns, CopyMode::Update, false).await?);
-            // 4. Pull remote files where remote is newer
             stats
                 .add(&run_copy(remote, &local_str, &rule.patterns, CopyMode::Update, false).await?);
         }
@@ -176,19 +167,14 @@ async fn run_sync(src: &str, dst: &str, patterns: &[String]) -> Result<TransferS
     Ok(parse_stats(&output.stderr))
 }
 
-/// Flags appended to every rclone invocation to get JSON stats on stderr.
 const STATS_FLAGS: &[&str] = &["--use-json-log", "--stats-one-line", "-v"];
 
-/// Parse the last JSON stats line from rclone's stderr.
-/// Looks for a line containing `"stats":{...}` and extracts `transfers` and `bytes`.
 fn parse_stats(stderr: &[u8]) -> TransferStats {
     let text = String::from_utf8_lossy(stderr);
-    // Find the last line that contains a "stats" object
     for line in text.lines().rev() {
         if !line.contains("\"stats\"") {
             continue;
         }
-        // Parse as generic JSON value
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(line)
             && let Some(stats) = v.get("stats")
         {
@@ -207,36 +193,37 @@ async fn rename_conflicts(
     rule: &SyncRule,
     status_tx: &watch::Sender<DaemonStatus>,
 ) -> Result<()> {
-    // rclone check --differ - writes conflicting relative file paths to stdout, one per line.
-    // Exit code is non-zero when differences exist — that's expected, not an error.
     let cmd = crate::rclone::check_command(remote, &local.to_string_lossy(), &rule.patterns);
-
     let output = tokio::process::Command::from(cmd)
         .output()
         .await
         .context("spawning rclone check")?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let differing: Vec<String> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect();
+
+    if differing.is_empty() {
+        return Ok(());
+    }
+
+    let baseline_path = sync_baseline_file(remote_name, &rule.name);
+    let baseline = SyncBaseline::load(&baseline_path);
+    let has_baseline = !baseline.files.is_empty();
+
     let mut new_conflicts: Vec<ConflictEntry> = Vec::new();
 
-    for relative_path in stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
+    for relative_path in &differing {
         let local_path = local.join(relative_path);
         let local_meta = match tokio::fs::metadata(&local_path).await {
             Ok(m) => m,
-            Err(_) => continue, // file only on remote side — not a conflict
+            Err(_) => continue,
         };
 
-        let ts = Utc::now().format("%Y%m%dT%H%M%S");
-        let stem = local_path.file_stem().unwrap_or_default().to_string_lossy();
-        let ext = local_path
-            .extension()
-            .map(|e| format!(".{}", e.to_string_lossy()))
-            .unwrap_or_default();
-        let conflict_name = format!("{}.conflict-{}{}", stem, ts, ext);
-        let conflict_path = local_path.parent().unwrap_or(local).join(&conflict_name);
-
-        // Gather local metadata before renaming
-        let local_size = local_meta.len();
         let local_mtime = local_meta
             .modified()
             .ok()
@@ -248,16 +235,48 @@ async fn rename_conflicts(
             })
             .unwrap_or_else(Utc::now);
 
-        // Gather remote metadata via rclone lsjson (single file)
         let remote_file_path = format!("{}/{}", remote, relative_path);
         let (remote_size, remote_mtime) = fetch_remote_meta(&remote_file_path).await;
+
+        if has_baseline {
+            let local_changed = !baseline.is_unchanged(relative_path, local_mtime);
+            let remote_changed = !baseline.is_unchanged(relative_path, remote_mtime);
+
+            if !local_changed || !remote_changed {
+                tracing::debug!(
+                    rule = %rule.name,
+                    file = %relative_path,
+                    local_changed,
+                    remote_changed,
+                    "file differs but only one side changed since last sync — not a conflict"
+                );
+                continue;
+            }
+        } else {
+            tracing::debug!(
+                rule = %rule.name,
+                file = %relative_path,
+                "no baseline yet — skipping conflict detection for first sync"
+            );
+            continue;
+        }
+
+        let local_size = local_meta.len();
+        let ts = Utc::now().format("%Y%m%dT%H%M%S");
+        let stem = local_path.file_stem().unwrap_or_default().to_string_lossy();
+        let ext = local_path
+            .extension()
+            .map(|e| format!(".{}", e.to_string_lossy()))
+            .unwrap_or_default();
+        let conflict_name = format!("{}.conflict-{}{}", stem, ts, ext);
+        let conflict_path = local_path.parent().unwrap_or(local).join(&conflict_name);
 
         warn!(
             rule = %rule.name,
             file = %relative_path,
             from = %local_path.display(),
             to = %conflict_path.display(),
-            "conflict detected — renaming local copy (stays local only)"
+            "true conflict — both sides changed since last sync, renaming local copy"
         );
 
         tokio::fs::rename(&local_path, &conflict_path)
@@ -267,6 +286,7 @@ async fn rename_conflicts(
         new_conflicts.push(ConflictEntry {
             file: relative_path.to_string(),
             local_path: conflict_path.to_string_lossy().to_string(),
+            original_local_path: local_path.to_string_lossy().to_string(),
             remote_path: remote_file_path,
             local_size,
             local_mtime,
@@ -285,7 +305,6 @@ async fn rename_conflicts(
                     .iter_mut()
                     .find(|r| r.name == rule_name)
             {
-                // Merge: don't duplicate conflicts already tracked
                 for entry in new_conflicts {
                     if !rule_status.conflicts.iter().any(|c| c.file == entry.file) {
                         rule_status.conflicts.push(entry);
@@ -299,8 +318,89 @@ async fn rename_conflicts(
     Ok(())
 }
 
-/// Fetch size and mtime of a single remote file via `rclone lsjson`.
-/// Returns (0, Utc::now()) on failure — best effort.
+async fn update_baseline(
+    local: &std::path::Path,
+    remote: &str,
+    remote_name: &str,
+    rule: &SyncRule,
+) {
+    let baseline_path = sync_baseline_file(remote_name, &rule.name);
+    let mut baseline = SyncBaseline::load(&baseline_path);
+
+    if let Ok(mut read_dir) = tokio::fs::read_dir(local).await {
+        while let Ok(Some(entry)) = read_dir.next_entry().await {
+            let path = entry.path();
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            if name.contains(".conflict-") {
+                continue;
+            }
+            let Ok(meta) = tokio::fs::metadata(&path).await else {
+                continue;
+            };
+            if !meta.is_file() {
+                continue;
+            }
+            let Some(relative) = path
+                .strip_prefix(local)
+                .ok()
+                .map(|p| p.to_string_lossy().to_string())
+            else {
+                continue;
+            };
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| {
+                    DateTime::from_timestamp(
+                        t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64,
+                        0,
+                    )
+                })
+                .unwrap_or_else(Utc::now);
+            baseline.set(&relative, mtime);
+        }
+    }
+
+    let output = tokio::process::Command::new("rclone")
+        .arg("lsjson")
+        .arg(remote)
+        .output()
+        .await;
+
+    if let Ok(output) = output
+        && output.status.success()
+        && let Ok(arr) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        && let Some(files) = arr.as_array()
+    {
+        for f in files {
+            let Some(name) = f.get("Name").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if baseline.files.contains_key(name) {
+                continue;
+            }
+            let mtime = f
+                .get("ModTime")
+                .and_then(|v| v.as_str())
+                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(Utc::now);
+            baseline.set(name, mtime);
+        }
+    }
+
+    if let Err(e) = baseline.save(&baseline_path) {
+        warn!(remote = %remote_name, rule = %rule.name, error = %e, "failed to save sync baseline");
+    } else {
+        tracing::debug!(
+            remote = %remote_name,
+            rule = %rule.name,
+            files = baseline.files.len(),
+            "sync baseline updated"
+        );
+    }
+}
+
 async fn fetch_remote_meta(remote_path: &str) -> (u64, DateTime<Utc>) {
     let output = tokio::process::Command::new("rclone")
         .arg("lsjson")

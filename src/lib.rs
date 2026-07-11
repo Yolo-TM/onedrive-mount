@@ -5,3 +5,4 @@ pub mod paths;
 pub mod pid_lock;
 pub mod resolution;
 pub mod status;
+pub mod sync_baseline;

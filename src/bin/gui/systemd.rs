@@ -1,5 +1,3 @@
-// Installs and manages the systemd user service for the daemon
-
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -11,10 +9,6 @@ fn unit_path() -> PathBuf {
 }
 
 fn unit_content(binary_path: &std::path::Path, extra_path_dirs: &[std::path::PathBuf]) -> String {
-    // Systemd user services start with a minimal PATH that does not include
-    // the user's Nix profile or any NixOS environment.systemPackages entries.
-    // We resolve rclone and fusermount3 at install time and bake their parent
-    // directories into the unit so the daemon can exec them by bare name.
     let base_path = "/run/current-system/sw/bin:/usr/local/bin:/usr/bin:/bin";
     let path = if extra_path_dirs.is_empty() {
         base_path.to_string()
@@ -47,20 +41,16 @@ fn unit_content(binary_path: &std::path::Path, extra_path_dirs: &[std::path::Pat
     )
 }
 
-/// Resolves the daemon binary path from the current executable's directory,
-/// verifies it actually exists and is executable before writing the unit file.
 fn daemon_binary_path() -> Result<PathBuf, String> {
     let exe =
         std::env::current_exe().map_err(|e| format!("cannot locate current executable: {e}"))?;
     let dir = exe.parent().ok_or("executable has no parent directory")?;
     let daemon = dir.join("onedrive-mountd");
 
-    // Canonicalize so symlinks are resolved and the path in the unit is absolute
     let daemon = daemon
         .canonicalize()
         .map_err(|_| format!("daemon binary not found at {}: run 'cargo build --bin onedrive-mountd --features daemon' first", daemon.display()))?;
 
-    // Basic sanity check: must be a regular file
     let meta = fs::metadata(&daemon).map_err(|e| format!("cannot stat daemon binary: {e}"))?;
     if !meta.is_file() {
         return Err(format!("{} is not a regular file", daemon.display()));
@@ -69,13 +59,8 @@ fn daemon_binary_path() -> Result<PathBuf, String> {
     Ok(daemon)
 }
 
-/// Resolves a binary by searching PATH plus NixOS well-known locations,
-/// canonicalizing symlinks so we get the real Nix store bin dir rather than
-/// a profile symlink that may not be visible inside the systemd unit's PATH.
 fn resolve_bin_dir(name: &str) -> Option<std::path::PathBuf> {
     let path_var = std::env::var("PATH").unwrap_or_default();
-    // Always append NixOS system and user profile dirs so this works when the
-    // GUI is launched from a .desktop file with a minimal desktop-session PATH.
     let search = format!(
         "{}:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin",
         path_var
@@ -94,8 +79,6 @@ fn resolve_bin_dir(name: &str) -> Option<std::path::PathBuf> {
 pub fn install() -> Result<(), String> {
     let binary = daemon_binary_path()?;
 
-    // Collect the Nix store bin dirs for rclone and fusermount so the unit's
-    // PATH covers them regardless of what systemd injects at runtime.
     let mut extra_dirs: Vec<std::path::PathBuf> = Vec::new();
     for bin in &["rclone", "fusermount3", "fusermount"] {
         if let Some(dir) = resolve_bin_dir(bin)
@@ -144,8 +127,6 @@ pub fn is_enabled() -> bool {
         .unwrap_or(false)
 }
 
-/// Returns the last error line from the daemon's journal, if any.
-/// Used to surface crash reasons (e.g. rclone not found) when the service is inactive.
 pub fn last_exit_error() -> Option<String> {
     let output = Command::new("journalctl")
         .args([

@@ -1,6 +1,3 @@
-// Conflict resolution UI: shows pending conflicts and lets the user resolve them.
-// Writes decisions to conflict-resolutions.toml which the daemon watches via inotify.
-
 use eframe::egui;
 use onedrive_mount::{
     paths::conflict_resolutions_file,
@@ -8,7 +5,6 @@ use onedrive_mount::{
     status::{ConflictEntry, DaemonStatus},
 };
 
-/// Collected conflict with its owning remote/rule names for display.
 struct PendingConflict {
     remote: String,
     rule: String,
@@ -36,7 +32,6 @@ pub fn show(ui: &mut egui::Ui, status: &Option<DaemonStatus>, error: &mut Option
     ));
     ui.add_space(8.0);
 
-    // Bulk actions
     ui.horizontal(|ui| {
         if ui
             .button("Keep all local")
@@ -65,7 +60,6 @@ pub fn show(ui: &mut egui::Ui, status: &Option<DaemonStatus>, error: &mut Option
     ui.separator();
     ui.add_space(4.0);
 
-    // Per-conflict rows
     for conflict in &conflicts {
         show_conflict_row(ui, conflict, error);
         ui.separator();
@@ -77,7 +71,6 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
 
     ui.add_space(4.0);
 
-    // Header
     ui.horizontal(|ui| {
         ui.strong(&entry.file);
         ui.weak(format!(
@@ -88,7 +81,6 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
 
     ui.add_space(2.0);
 
-    // Side-by-side info
     egui::Grid::new(format!(
         "conflict_{}_{}_{}",
         conflict.remote, conflict.rule, entry.file
@@ -138,12 +130,10 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
             .format("%Y-%m-%d %H:%M:%S")
     ));
 
-    // Try to show a diff for small text files
     show_diff_preview(ui, entry);
 
     ui.add_space(4.0);
 
-    // Action buttons
     ui.horizontal(|ui| {
         if ui
             .button("Keep local")
@@ -174,7 +164,6 @@ fn show_conflict_row(ui: &mut egui::Ui, conflict: &PendingConflict, error: &mut 
 fn show_diff_preview(ui: &mut egui::Ui, entry: &ConflictEntry) {
     let local_path = std::path::Path::new(&entry.local_path);
 
-    // Only attempt diff for files under 500KB that look like text
     if entry.local_size > 500 * 1024 || entry.remote_size > 500 * 1024 {
         return;
     }
@@ -183,7 +172,6 @@ fn show_diff_preview(ui: &mut egui::Ui, entry: &ConflictEntry) {
         return;
     };
 
-    // Check if content is valid UTF-8
     let Ok(local_text) = std::str::from_utf8(&local_content) else {
         ui.add_space(2.0);
         ui.weak("Binary file — diff not available");
@@ -265,7 +253,6 @@ fn submit_one(conflict: &PendingConflict, action: ResolutionAction, error: &mut 
 fn write_resolutions(resolutions: Vec<Resolution>, error: &mut Option<String>) {
     let path = conflict_resolutions_file();
 
-    // Load existing resolutions and append new ones (in case daemon hasn't processed previous batch)
     let mut file = ResolutionFile::load(&path).unwrap_or_default();
     file.resolutions.extend(resolutions);
 

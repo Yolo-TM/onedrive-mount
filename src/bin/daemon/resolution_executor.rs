@@ -1,16 +1,14 @@
-// Applies conflict resolution decisions from the GUI.
-// Each resolution either copies a file in one direction or renames the local copy.
-
 use anyhow::{Context, Result};
 use chrono::Utc;
 use onedrive_mount::{
+    paths::sync_baseline_file,
     resolution::{Resolution, ResolutionAction},
     status::{ConflictEntry, DaemonStatus, SyncState},
+    sync_baseline::SyncBaseline,
 };
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
-/// Apply a batch of resolutions. Returns the set of (remote, rule) pairs that were unblocked.
 pub async fn apply(
     resolutions: &[Resolution],
     status_tx: &watch::Sender<DaemonStatus>,
@@ -26,7 +24,6 @@ pub async fn apply(
             "applying conflict resolution"
         );
 
-        // Find the conflict entry from status to get paths
         let conflict = {
             let s = status_tx.borrow();
             s.remotes
@@ -55,14 +52,35 @@ pub async fn apply(
                     file = %res.file,
                     "resolution applied successfully"
                 );
-                // Remove conflict from status
+
+                if !matches!(res.action, ResolutionAction::KeepBoth) {
+                    let conflict_path = std::path::Path::new(&conflict.local_path);
+                    if conflict_path.exists() {
+                        if let Err(e) = tokio::fs::remove_file(conflict_path).await {
+                            warn!(
+                                file = %conflict.local_path,
+                                error = %e,
+                                "failed to delete resolved conflict file"
+                            );
+                        } else {
+                            info!(file = %conflict.local_path, "deleted resolved conflict file");
+                        }
+                    }
+                }
+
+                let baseline_path = sync_baseline_file(&res.remote, &res.rule);
+                let mut baseline = SyncBaseline::load(&baseline_path);
+                baseline.set(&res.file, Utc::now());
+                if let Err(e) = baseline.save(&baseline_path) {
+                    warn!(error = %e, "failed to update baseline after resolution");
+                }
+
                 status_tx.send_modify(|s| {
                     if let Some(remote) = s.remotes.iter_mut().find(|r| r.name == res.remote)
                         && let Some(rule) =
                             remote.sync_rules.iter_mut().find(|sr| sr.name == res.rule)
                     {
                         rule.conflicts.retain(|c| c.file != res.file);
-                        // If all conflicts resolved, unblock the rule
                         if rule.conflicts.is_empty() && rule.state.is_blocked() {
                             rule.state = SyncState::Idle;
                             info!(
@@ -86,7 +104,6 @@ pub async fn apply(
         }
     }
 
-    // Collect unblocked rules for re-triggering
     let s = status_tx.borrow();
     for res in resolutions {
         if let Some(remote) = s.remotes.iter().find(|r| r.name == res.remote)
@@ -106,62 +123,67 @@ pub async fn apply(
 async fn apply_one(res: &Resolution, conflict: &ConflictEntry) -> Result<()> {
     match res.action {
         ResolutionAction::KeepLocal => {
-            // Copy local → remote (overwrite remote with local version)
             info!(
                 file = %res.file,
-                local = %conflict.local_path,
+                conflict_file = %conflict.local_path,
                 remote = %conflict.remote_path,
-                "keep_local: copying local to remote"
+                "keep_local: uploading local version to remote"
             );
             run_copy(&conflict.local_path, &conflict.remote_path).await?;
-        }
-        ResolutionAction::KeepRemote => {
-            // Copy remote → local (overwrite local with remote version)
+
             info!(
                 file = %res.file,
-                local = %conflict.local_path,
-                remote = %conflict.remote_path,
-                "keep_remote: copying remote to local"
+                from = %conflict.local_path,
+                to = %conflict.original_local_path,
+                "keep_local: restoring local version as canonical local file"
             );
-            run_copy(&conflict.remote_path, &conflict.local_path).await?;
+            tokio::fs::copy(&conflict.local_path, &conflict.original_local_path)
+                .await
+                .context("restoring local file for keep_local")?;
+        }
+        ResolutionAction::KeepRemote => {
+            info!(
+                file = %res.file,
+                local = %conflict.original_local_path,
+                "keep_remote: remote version already in place locally, discarding conflict file"
+            );
         }
         ResolutionAction::KeepBoth => {
-            // Rename local to .conflict-<timestamp>, then copy remote → local
-            let local = std::path::Path::new(&conflict.local_path);
+            let conflict_file = std::path::Path::new(&conflict.local_path);
             let ts = Utc::now().format("%Y%m%dT%H%M%S");
-            let stem = local.file_stem().unwrap_or_default().to_string_lossy();
-            let ext = local
+            let raw_stem = conflict_file
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy();
+            let base_stem = raw_stem
+                .find(".conflict-")
+                .map(|i| &raw_stem[..i])
+                .unwrap_or(&raw_stem);
+            let ext = conflict_file
                 .extension()
                 .map(|e| format!(".{}", e.to_string_lossy()))
                 .unwrap_or_default();
-            let conflict_name = format!("{}.conflict-{}{}", stem, ts, ext);
-            let conflict_path = local.parent().unwrap_or(local).join(&conflict_name);
+            let permanent_name = format!("{}.conflict-{}{}", base_stem, ts, ext);
+            let permanent_path = conflict_file
+                .parent()
+                .unwrap_or(conflict_file)
+                .join(&permanent_name);
 
             info!(
                 file = %res.file,
-                from = %local.display(),
-                to = %conflict_path.display(),
-                "keep_both: renaming local copy"
+                from = %conflict_file.display(),
+                to = %permanent_path.display(),
+                "keep_both: renaming conflict file to permanent name"
             );
-            tokio::fs::rename(local, &conflict_path)
+            tokio::fs::rename(conflict_file, &permanent_path)
                 .await
-                .context("renaming local file for keep_both")?;
-
-            info!(
-                file = %res.file,
-                remote = %conflict.remote_path,
-                local = %conflict.local_path,
-                "keep_both: copying remote to local"
-            );
-            run_copy(&conflict.remote_path, &conflict.local_path).await?;
+                .context("renaming conflict file for keep_both")?;
         }
     }
     Ok(())
 }
 
-/// Run a single-file rclone copy between two paths.
 async fn run_copy(src: &str, dst: &str) -> Result<()> {
-    // For single-file resolution, use rclone copyto (copies a single file to a destination path)
     let mut cmd = std::process::Command::new("rclone");
     cmd.arg("copyto").arg(src).arg(dst);
 
