@@ -270,10 +270,10 @@ async fn check_mount_health(
     for remote in &config.remotes {
         let state = mounts.health_check(remote).await;
         status_tx.send_modify(|s| {
-            if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name) {
-                if rs.mount != state {
-                    rs.mount = state;
-                }
+            if let Some(rs) = s.remotes.iter_mut().find(|r| r.name == remote.name)
+                && rs.mount != state
+            {
+                rs.mount = state;
             }
         });
     }
