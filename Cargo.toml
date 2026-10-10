@@ -1,45 +1,35 @@
-[package]
-name = "onedrive-mount"
-version = "0.2.8"
-edition = "2024"
+[workspace]
+members = ["crates/core", "crates/daemon", "crates/cli"]
+resolver = "3"
 
-[dependencies]
-anyhow = "1"
-libc = "0.2"
-serde = { version = "1", features = ["derive"] }
-toml = "1.1.2"
-dirs = "6.0.0"
-chrono = { version = "0.4", features = ["serde"] }
+[workspace.dependencies]
+onedrive-core = { path = "crates/core" }
 
-# daemon-only
-tokio = { version = "1", features = ["full"], optional = true }
-tokio-util = { version = "0.7", features = ["rt"], optional = true }
-notify = { version = "8.2.0", optional = true }
-tracing = { version = "0.1", optional = true }
-tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono"], optional = true }
-tracing-appender = { version = "0.2", optional = true }
-nix = { version = "0.29", features = ["signal", "process"], optional = true }
+anyhow              = "1"
+chrono              = { version = "0.4", features = ["serde"] }
+clap                = { version = "4", features = ["derive", "wrap_help"] }
+libc                = "0.2"
+notify              = "8.2"
+rusqlite            = { version = "0.37", features = ["bundled"] }
+serde               = { version = "1", features = ["derive"] }
+serde_json          = "1"
+tokio               = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "net", "process", "signal", "sync", "time"] }
+toml                = "1"
+tracing             = "0.1"
+tracing-appender    = "0.2"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+# D-Bus for the sleep/resume/network/lock signals. `tokio` feature so it shares
+# our runtime instead of starting an async-io one alongside it.
+zbus                = { version = "5", default-features = false, features = ["tokio"] }
+# Only for `Stream`; zbus returns streams and we need one adapter over them.
+futures-core        = "0.3"
+# Pure-Rust FUSE: talks to /dev/fuse via fusermount3 directly, no libfuse/
+# pkg-config dependency — confirmed by building and mounting with it unmodified.
+fuser               = "0.18.0"
+# The TUI dashboard. No `serde`/async features: the dashboard polls the IPC
+# client synchronously on a timer, same as every other CLI command.
+ratatui             = "0.29"
+crossterm           = "0.29"
 
-# gui-only — disable wayland (dlopen at runtime), use x11 + glow (static OpenGL)
-eframe = { version = "0.34.3", default-features = false, features = ["accesskit", "default_fonts", "glow", "x11"], optional = true }
-resvg = { version = "0.44", optional = true }
-serde_json = { version = "1", optional = true }
-open = { version = "5", optional = true }
-
-[dev-dependencies]
-tempfile = "3"
-filetime = "0.2"
-
-[features]
-daemon = ["dep:tokio", "dep:tokio-util", "dep:notify", "dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:nix", "dep:serde_json"]
-gui = ["dep:eframe", "dep:resvg", "dep:serde_json", "dep:open"]
-
-[[bin]]
-name = "onedrive-mountd"
-path = "src/bin/daemon/main.rs"
-required-features = ["daemon"]
-
-[[bin]]
-name = "onedrive-mount"
-path = "src/bin/gui/main.rs"
-required-features = ["gui"]
+tempfile            = "3"
+filetime            = "0.2"

@@ -16,18 +16,80 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install GUI runtime deps
+      # Caching matters now that the workspace pulls in rusqlite's bundled
+      # SQLite, which is a C build and the slowest thing here.
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb-render0-dev \
-            libxkbcommon-dev libgl1-mesa-dev pkg-config rclone
+          sudo apt-get install -y rclone fuse3
 
       - name: Format
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --all-features -- -D warnings
+      # --all-targets so tests and benches are linted too, not just the libs.
+      - name: Clippy (workspace)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Test
-        run: cargo test --all-features
+      - name: Test (workspace)
+        run: cargo test --workspace
+
+      # Guards against the daemon and the CLI drifting apart on the control
+      # protocol, and against the daemon refusing to start at all.
+      - name: Smoke test the binaries
+        run: |
+          set -euo pipefail
+          cargo build --workspace
+          BIN="target/debug"
+
+          export HOME="$(mktemp -d)"
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+
+          "$BIN/onedrived" --version
+          "$BIN/onedrive-tui" --version
+          "$BIN/onedrived" --print-unit | grep -q 'Type=notify'
+
+          # No config yet: --check-config must fail cleanly with its own code.
+          if "$BIN/onedrived" --check-config; then
+            echo "expected --check-config to fail with no config present" >&2
+            exit 1
+          fi
+
+          mkdir -p "$HOME/.config/onedrive"
+          cp config.example.toml "$HOME/.config/onedrive/config.toml"
+          "$BIN/onedrived" --check-config
+
+          "$BIN/onedrived" &
+          DAEMON=$!
+          trap 'kill $DAEMON 2>/dev/null || true' EXIT
+
+          # Wait for readiness via the control socket rather than a fixed sleep.
+          for _ in $(seq 1 50); do
+            if "$BIN/onedrive-tui" status --json >/dev/null 2>&1; then break; fi
+            sleep 0.2
+          done
+
+          "$BIN/onedrive-tui" status --json | tee /dev/stderr | grep -q '"source": "daemon"'
+          "$BIN/onedrive-tui" log -n 5
+          # doctor exits 1 on warnings, which a CI box legitimately has.
+          "$BIN/onedrive-tui" doctor || [ $? -le 1 ]
+
+          # A second instance must refuse rather than racing the first.
+          if "$BIN/onedrived"; then
+            echo "expected a second daemon to be refused" >&2
+            exit 1
+          fi
+
+          kill -TERM $DAEMON
+          wait $DAEMON 2>/dev/null || true
+
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+      - name: Evaluate the flake
+        run: nix flake check --no-build
+      - name: Build the daemon and CLI
+        run: nix build .#onedrive
