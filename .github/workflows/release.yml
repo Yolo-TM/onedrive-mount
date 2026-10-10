@@ -18,7 +18,10 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y rclone fuse3
+          sudo apt-get install -y fuse3
+          # See ci.yml: apt's rclone is far too old for the bisync flags this
+          # project relies on (needs >= 1.74.0).
+          curl https://rclone.org/install.sh | sudo bash
 
       - name: Format
         run: cargo fmt --all -- --check

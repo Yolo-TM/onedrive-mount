@@ -23,7 +23,15 @@ jobs:
       - name: Install build deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y rclone fuse3
+          sudo apt-get install -y fuse3
+          # Not `apt-get install rclone`: Ubuntu's package trails upstream by
+          # over a decade of releases (1.60.1 on 24.04, as of this writing) —
+          # found the hard way when every bisync-based test failed here with
+          # an opaque "exited with status 1", because rclone 1.60 doesn't
+          # know `--conflict-resolve`/`--conflict-loser`/`--recover`, added in
+          # 1.74.0, and a flag-parse error prints before JSON logging exists
+          # to capture. The install script always gets a current release.
+          curl https://rclone.org/install.sh | sudo bash
 
       - name: Format
         run: cargo fmt --all -- --check

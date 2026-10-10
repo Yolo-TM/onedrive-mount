@@ -406,8 +406,9 @@ async fn run_once(
 /// ordinary and will be retried.
 fn classify_failure(stderr: &str, status: std::process::ExitStatus) -> Outcome {
     let lower = stderr.to_ascii_lowercase();
-    let detail =
-        last_error_line(stderr).unwrap_or_else(|| format!("rclone bisync exited with {status}"));
+    let detail = last_error_line(stderr)
+        .or_else(|| first_nonempty_line(stderr))
+        .unwrap_or_else(|| format!("rclone bisync exited with {status}"));
 
     if lower.contains("access test failed") || lower.contains("check file check failed") {
         return Outcome::Refused {
@@ -485,6 +486,24 @@ fn last_error_line(stderr: &str) -> Option<String> {
         .filter_map(|line| serde_json::from_str::<LogLine>(line).ok())
         .find(|entry| matches!(entry.level.as_str(), "error" | "critical" | "emergency"))
         .map(|entry| strip_ansi(&entry.msg))
+}
+
+/// Falls back to this when stderr has content but none of it parses as a
+/// JSON log line — e.g. a flag-parse error, which rclone prints as plain
+/// text before its JSON logger is even set up (exactly what an
+/// unsupported/too-old rclone produces: "Error: unknown flag:
+/// --conflict-resolve", followed by a multi-line usage dump). Without this, a
+/// real diagnostic message was silently replaced by a bare exit status, which
+/// is what made a stale rclone take real effort to diagnose the one time it
+/// actually happened. The *first* non-empty line, not the last: Cobra prints
+/// the error before the usage text, the same ordering that makes
+/// `last_error_line` prefer the first match over the last for JSON output.
+fn first_nonempty_line(stderr: &str) -> Option<String> {
+    stderr
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(strip_ansi)
 }
 
 /// rclone colourises some messages even with `--use-json-log`.
@@ -889,6 +908,33 @@ mod tests {
         let detail = last_error_line(&log).unwrap();
         assert!(detail.starts_with("Empty current Path2"), "{detail}");
         assert!(!detail.contains("retryable"), "{detail}");
+    }
+
+    /// The case that actually happened: an rclone too old for a flag used here
+    /// prints a plain-text usage error and exits 1 before its JSON logger
+    /// exists at all, so `last_error_line` finds nothing. The fallback must
+    /// still surface *that* message, not a bare exit status — otherwise the
+    /// real cause (here, an outdated rclone in CI) is invisible.
+    #[test]
+    fn a_non_json_stderr_still_surfaces_its_real_message() {
+        let log = "Error: unknown flag: --conflict-resolve\nUsage:\n  rclone bisync ...\n";
+        match classify_failure(log, exit_status(1)) {
+            Outcome::Failed { code, msg } => {
+                assert_eq!(code, Code::Internal);
+                assert!(msg.contains("unknown flag: --conflict-resolve"), "{msg}");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    /// Truly empty stderr (the process produced nothing at all) is the one
+    /// case left with no real message to show, so the bare status is correct.
+    #[test]
+    fn empty_stderr_falls_back_to_the_bare_status() {
+        match classify_failure("", exit_status(1)) {
+            Outcome::Failed { msg, .. } => assert!(msg.contains("exited with"), "{msg}"),
+            other => panic!("expected Failed, got {other:?}"),
+        }
     }
 
     #[test]

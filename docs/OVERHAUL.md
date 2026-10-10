@@ -1602,7 +1602,38 @@ no sandbox can give them.
 
 ### What is still manual
 
-Nothing has been committed or tagged. Per this project's standing rule,
-commits need the user present (GPG-signed), so the working tree is staged
-(`git add -A`) and ready — a single commit plus a `v0.3.0` tag is what is
-left to actually ship this.
+A `v0.3.0` tag is what is left to actually ship this.
+
+### A real CI failure, and what it actually was
+
+Once this was pushed, GitHub Actions' `check` job failed 14 of the 15 safety
+matrix tests with an unhelpfully bare `failed [E_INTERNAL]: rclone bisync
+exited with exit status: 1`. Every local run — including in parallel, which
+is how `cargo test` already runs by default — passed, so this was an
+environment difference, not a flaky test. The actual cause, confirmed via
+Ubuntu's own package metadata rather than assumed: `ci.yml`/`release.yml`
+installed rclone with `apt-get install rclone`, which on `ubuntu-latest`
+(24.04) gives **1.60.1** — Ubuntu's package trails upstream by years.
+`bisync.rs`'s own `--conflict-resolve`/`--conflict-loser`/`--recover` flags
+were only added in rclone **1.74.0**; on 1.60.1, every invocation hit an
+immediate Cobra flag-parse error (`Error: unknown flag: --conflict-resolve`),
+printed as plain text before rclone's JSON logger even exists, exit code 1.
+
+That also explains why the failure was so hard to read: `classify_failure`'s
+`last_error_line` only recognises **JSON** log lines at error level or above,
+so a plain-text pre-logger error found nothing and fell through to a bare
+`"rclone bisync exited with {status}"` — technically correct, useless in
+practice. Fixed in both directions:
+
+- **`ci.yml`/`release.yml`** now install rclone via `rclone.org/install.sh`
+  (always current) instead of apt, keeping only `fuse3` from the package
+  manager.
+- **`bisync.rs`'s `classify_failure`** gained a second fallback,
+  `first_nonempty_line`, tried when `last_error_line` finds no JSON: the
+  first non-empty line of raw stderr (Cobra prints the error before the
+  usage dump it appends, the same reason `last_error_line` already prefers
+  the first JSON match over the last). Two new tests
+  (`a_non_json_stderr_still_surfaces_its_real_message`,
+  `empty_stderr_falls_back_to_the_bare_status`) cover it — the daemon's own
+  code was never wrong here, but it was unnecessarily opaque about a real
+  rclone-side error, and now isn't.
