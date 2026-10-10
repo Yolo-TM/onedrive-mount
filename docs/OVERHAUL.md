@@ -1658,3 +1658,34 @@ overrides, in both `ci.yml`'s smoke test and `flake.nix`'s `preCheck`
 (the latter as a defensive match, not because it was observed failing there
 — Nix's build sandbox is normally stripped of ambient host env vars, so this
 specific bug is unlikely to reach it, but nothing guarantees that forever).
+
+### A third CI failure, from the fix for the second
+
+Fixing that and pushing again got further — `onedrived --check-config`
+correctly found the just-written config this time — but the same step then
+died silently right after printing a perfectly valid `status --json` blob,
+exit code 2, nothing from `log` or `doctor` at all. Reproduced locally by
+giving the mount supervisor a few seconds to settle before calling `status`
+(`sleep 3` between the readiness-poll loop and the status check): the
+pipeline
+
+```sh
+"$BIN/onedrive-tui" status --json | tee /dev/stderr | grep -q '"source": "daemon"'
+```
+
+fails outright, identically. The cause: `status --json`'s own exit code *is*
+the overall health roll-up (0 healthy / 1 degraded / 2 broken) — by design,
+so a shell script can key off it — not "did this call succeed." The example
+config's `onedrive-timm` remote has no real rclone credentials (correctly so,
+for a smoke test that must run with no secrets), so the mount and pin
+genuinely settle into `Failed` within this window; `MountState::Failed` maps
+to `Health::Broken` (confirmed against the `render.rs` test
+`a_failed_mount_breaks_and_an_unmounted_one_degrades`), so `status --json`
+exits 2 even though it printed exactly what it should have. Piped straight
+into `grep` under `pipefail`, that 2 propagates and `set -e` kills the step
+before `log -n 5` or `doctor` ever run — both of which were therefore never
+the problem, contrary to what the missing output suggested. Fixed by
+capturing the JSON into a variable first (`|| true` so the capture itself
+can't trip `-e` on the health-derived exit code) and asserting on it
+separately — the pipeline's exit code was never what this step meant to
+check; `grep`'s own, now-correctly-isolated, is.

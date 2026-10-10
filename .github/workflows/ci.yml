@@ -87,7 +87,17 @@ jobs:
             sleep 0.2
           done
 
-          "$BIN/onedrive-tui" status --json | tee /dev/stderr | grep -q '"source": "daemon"'
+          # Captured rather than piped straight into grep: `status --json`'s
+          # own exit code is the overall health (0/1/2), not "did this call
+          # succeed" — and the example config's remote has no real rclone
+          # credentials, so the mount settles into a genuinely failed state
+          # within this window, making exit 2 here expected, not a bug. Piped
+          # under `pipefail` that killed the step before `log`/`doctor` ever
+          # ran. Only the "did we actually reach the daemon" check below is
+          # what this step is for.
+          STATUS_JSON="$("$BIN/onedrive-tui" status --json || true)"
+          echo "$STATUS_JSON"
+          echo "$STATUS_JSON" | grep -q '"source": "daemon"'
           "$BIN/onedrive-tui" log -n 5
           # doctor exits 1 on warnings, which a CI box legitimately has.
           "$BIN/onedrive-tui" doctor || [ $? -le 1 ]
