@@ -5,80 +5,20 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.url = "github:numtide/flake-utils";
+    # Only used by `checks` below, to build a standalone Home Manager
+    # configuration against ./nix/home-manager-module.nix and catch option
+    # or generated-TOML mistakes in CI. Consumers of homeManagerModules.default
+    # bring their own Home Manager; this input is not required to use it.
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils }:
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, home-manager }:
     let
-      # The thing the old 0.2.x module never did: actually install the
-      # systemd user unit. Previously the unit was written at runtime by a
-      # button in a GUI, which meant a machine could have the package
-      # installed and no service at all — and the unit it wrote ordered
-      # itself against `network-online.target`, a *system* unit that has no
-      # effect in the user manager.
-      onedriveModule = { config, lib, pkgs, ... }:
-        let
-          cfg = config.services.onedrive;
-          pkg = self.packages.${pkgs.stdenv.hostPlatform.system}.onedrive;
-        in {
-          options.services.onedrive = {
-            enable = lib.mkEnableOption "onedrive daemon";
-
-            package = lib.mkOption {
-              type = lib.types.package;
-              default = pkg;
-              description = "The onedrive package to use.";
-            };
-
-            users = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [ ];
-              example = [ "alice" ];
-              description = ''
-                Users for whom to enable linger, so the daemon keeps running
-                after logout. Without this, background sync stops when you log
-                out — the single most common way the old setup silently died.
-              '';
-            };
-          };
-
-          config = lib.mkIf cfg.enable {
-            environment.systemPackages = [
-              cfg.package
-              pkgs.rclone
-              pkgs.fuse3
-            ];
-
-            programs.fuse.userAllowOther = true;
-
-            systemd.user.services.onedrived = {
-              description = "OneDrive daemon";
-              wantedBy = [ "default.target" ];
-
-              # Deliberately no `after = [ "network-online.target" ]`: that is a
-              # system unit and ordering a user unit against it does nothing.
-              # Network readiness is decided at runtime over D-Bus instead.
-              serviceConfig = {
-                Type = "notify";
-                NotifyAccess = "main";
-                ExecStart = "${cfg.package}/bin/onedrived";
-                Restart = "always";
-                RestartSec = 2;
-                # Never give up restarting; a daemon that has stopped trying is
-                # useless, and the default start limiter would do exactly that.
-                StartLimitIntervalSec = 0;
-                # A daemon wedged on a hung FUSE mount stops pinging and gets
-                # restarted, instead of sitting "active" doing nothing forever.
-                WatchdogSec = 60;
-                TimeoutStopSec = 30;
-              };
-
-              environment.RUST_BACKTRACE = "1";
-              path = [ pkgs.rclone pkgs.fuse3 ];
-            };
-
-            users.users = lib.genAttrs cfg.users (_: { linger = true; });
-          };
-        };
+      onedriveModule = import ./nix/nixos-module.nix { inherit self; };
+      homeManagerModule = import ./nix/home-manager-module.nix { inherit self; };
 
     in flake-utils.lib.eachDefaultSystem (system:
       let
@@ -192,8 +132,38 @@
             echo "  cargo run -p onedrive-tui -- status"
           '';
         };
+
+        # Builds a standalone Home Manager generation against
+        # ./nix/home-manager-module.nix, so a broken option or a TOML that
+        # onedrive-core would reject is caught by `nix flake check` instead of
+        # at `home-manager switch` on someone's machine.
+        checks.home-manager-module =
+          (home-manager.lib.homeManagerConfiguration {
+            inherit pkgs;
+            modules = [
+              homeManagerModule
+              {
+                home.username = "test";
+                home.homeDirectory = "/home/test";
+                home.stateVersion = "24.05";
+
+                services.onedrive = {
+                  enable = true;
+                  remotes.onedrive-test = {
+                    mount_point = "~/OneDrive";
+                    pins.Keepass = {
+                      remote_path = "Dokumente/Keepass";
+                      local_path = "~/onedrive-keepass";
+                    };
+                  };
+                };
+              }
+            ];
+          }).activationPackage;
       }) // {
         nixosModules.default = onedriveModule;
         nixosModules.onedrive = onedriveModule;
+        homeManagerModules.default = homeManagerModule;
+        homeManagerModules.onedrive = homeManagerModule;
       };
 }
