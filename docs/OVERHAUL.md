@@ -1637,3 +1637,24 @@ practice. Fixed in both directions:
   `empty_stderr_falls_back_to_the_bare_status`) cover it — the daemon's own
   code was never wrong here, but it was unnecessarily opaque about a real
   rclone-side error, and now isn't.
+
+### A second CI failure, from the fix for the first
+
+Fixing the above and pushing again surfaced a different failure in the same
+job: the "Smoke test the binaries" step's second `onedrived --check-config`
+call reported `no config file` immediately after the step had just written
+one, exit code 4 (`exit::BAD_CONFIG`). Reproduced locally in one line rather
+than guessed at: setting `XDG_CONFIG_HOME` to an arbitrary directory before
+running the exact same script reproduces it exactly, and `unset`-ting it
+(alongside `XDG_STATE_HOME`/`XDG_CACHE_HOME`) fixes it. The cause:
+`Paths::from_env`'s XDG handling is correct per spec — an already-set
+`XDG_CONFIG_HOME` wins over `$HOME/.config` — but the smoke-test step only
+overrode `HOME` and `XDG_RUNTIME_DIR`, not the other three XDG variables, so
+if any of them is set in the runner's ambient environment (plausible on a
+shared GitHub-hosted image), the step's `mkdir`/`cp` and the daemon's own
+lookup land in two different places. Fixed by explicitly unsetting
+`XDG_CONFIG_HOME`/`XDG_STATE_HOME`/`XDG_CACHE_HOME` before exporting the
+overrides, in both `ci.yml`'s smoke test and `flake.nix`'s `preCheck`
+(the latter as a defensive match, not because it was observed failing there
+— Nix's build sandbox is normally stripped of ambient host env vars, so this
+specific bug is unlikely to reach it, but nothing guarantees that forever).

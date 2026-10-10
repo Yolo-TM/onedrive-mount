@@ -142,6 +142,7 @@
           # tests use explicit temp roots, but `Paths::from_env` is exercised and
           # the daemon writes a lock and a database, so give it a real one.
           preCheck = ''
+            unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME
             export HOME=$(mktemp -d)
             export XDG_RUNTIME_DIR=$(mktemp -d)
           '';

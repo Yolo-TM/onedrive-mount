@@ -51,6 +51,15 @@ jobs:
           cargo build --workspace
           BIN="target/debug"
 
+          # `Paths::from_env` follows the XDG base-dir spec correctly: an
+          # `XDG_CONFIG_HOME` (etc.) already set in the environment wins over
+          # `$HOME/.config` — that's the right behaviour for a real user, but
+          # it means overriding only `HOME` here is not enough to isolate this
+          # test from whatever the runner image happens to export. Found by
+          # this step failing with "no config file" right after writing one:
+          # the write and the read were landing in two different places.
+          # Clear all of them so this is self-contained regardless.
+          unset XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME
           export HOME="$(mktemp -d)"
           export XDG_RUNTIME_DIR="$(mktemp -d)"
 
