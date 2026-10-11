@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="345" viewBox="0 0 864 345" font-family="ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace">
+<rect x="0" y="0" width="864" height="345" rx="10" ry="10" fill="#1e1e2e"/>
+<path d="M0,10 a10,10 0 0 1 10,-10 h844 a10,10 0 0 1 10,10 v24 h-864 z" fill="#181825"/>
+<circle cx="22" cy="17" r="6" fill="#f38ba8"/>
+<circle cx="42" cy="17" r="6" fill="#f9e2af"/>
+<circle cx="62" cy="17" r="6" fill="#a6e3a1"/>
+<text x="432" y="22" text-anchor="middle" fill="#f5e0dc" font-size="13">onedrive-tui — ratatui dashboard</text>
+<g font-size="15" fill="#cdd6f4" xml:space="preserve">
+<text><tspan x="18.0" y="63.7" fill="#cdd6f4">┌onedrive-tui──────────────────────────────────────────────────────────────────────────────┐</tspan></text>
+<rect x="27.0" y="71.8" width="90.0" height="19.8" rx="4" fill="#313244"/>
+<text><tspan x="18.0" y="85.4" fill="#cdd6f4">│ Overview │ Pins │ Conflicts │ Outbox │ Log                                               │</tspan></text>
+<text><tspan x="18.0" y="107.2" fill="#cdd6f4">└──────────────────────────────────────────────────────────────────────────────────────────┘</tspan></text>
+<text><tspan x="18.0" y="128.9" fill="#cdd6f4">┌Overview──────────────────────────────────────────────────────────────────────────────────┐</tspan></text>
+<text><tspan x="18.0" y="150.7" fill="#cdd6f4">│net     online                                                                            │</tspan></text>
+<text><tspan x="18.0" y="172.4" fill="#cdd6f4">│mount   ~/OneDrive             </tspan><tspan x="306.0" y="172.4" fill="#a6e3a1">●</tspan><tspan x="315.0" y="172.4" fill="#cdd6f4"> up 20s                                                   │</tspan></text>
+<text><tspan x="18.0" y="194.2" fill="#cdd6f4">│index   6 files                </tspan><tspan x="306.0" y="194.2" fill="#a6e3a1">●</tspan><tspan x="315.0" y="194.2" fill="#cdd6f4"> crawled 21s ago                                          │</tspan></text>
+<text><tspan x="18.0" y="215.9" fill="#cdd6f4">│pin     Keepass                </tspan><tspan x="306.0" y="215.9" fill="#a6e3a1">●</tspan><tspan x="315.0" y="215.9" fill="#cdd6f4"> in-sync      15s ago                                     │</tspan></text>
+<text><tspan x="18.0" y="237.7" fill="#cdd6f4">│outbox  empty                                                                             │</tspan></text>
+<text><tspan x="18.0" y="259.4" fill="#cdd6f4">│log     ~/.local/state/onedrive/log 3.2 kB                                                │</tspan></text>
+<text><tspan x="18.0" y="281.2" fill="#cdd6f4">│                                                                                          │</tspan></text>
+<text><tspan x="18.0" y="302.9" fill="#cdd6f4">└──────────────────────────────────────────────────────────────────────────────────────────┘</tspan></text>
+<text><tspan x="18.0" y="324.7" fill="#cdd6f4">Tab: switch pane  ↑/↓: select  Enter: act  r: refresh  q: quit</tspan></text>
+</g>
+</svg>

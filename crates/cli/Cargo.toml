@@ -1,0 +1,22 @@
+[package]
+name = "onedrive-tui"
+version = "0.3.0"
+edition = "2024"
+
+[[bin]]
+name = "onedrive-tui"
+path = "src/main.rs"
+
+[dependencies]
+onedrive-core = { workspace = true }
+anyhow        = { workspace = true }
+chrono        = { workspace = true }
+clap          = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+toml          = { workspace = true }
+ratatui       = { workspace = true }
+crossterm     = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,36 +1,161 @@
-[[remotes]]
-name = "onedrive"            # must match rclone remote name
-mount_point = "~/onedrive"
-# type = "onedrive"
-# poll_interval = "30s"
-# enabled = true
-
-[remotes.mount]
-# vfs_cache_mode = "full"
-# vfs_cache_max_age = "72h"
-# vfs_cache_max_size = "20G"
-# vfs_write_back = "5s"
-# transfers = 8
-# dir_cache_time = "15m"
-# extra_flags = []
-
-[[remotes.sync_rules]]
-name = "Docs"
-remote_path = "Files/Docs"
-local_path = "~/Docs"
-patterns = ["*.pdf"]
-interval = "5m"
-sync_strategy = "bidirectional"   # bidirectional | newest_wins | mirror_down | mirror_up
-# enabled = false
+# onedrive — example configuration
 #
-# Strategy reference:
-#   bidirectional  — sync both ways; on conflict, keep both (local renamed with .conflict- suffix)
-#   newest_wins    — sync both ways; on conflict, newer mtime wins (older is overwritten)
-#   mirror_down    — one-way remote → local; local changes are DELETED
-#   mirror_up      — one-way local → remote; remote changes are DELETED
+# Lives at ~/.config/onedrive/config.toml
+#
+# Every value shown here is the default, so a minimal working config is just a
+# [[remote]] block with a name and a mount_point. Unknown keys are rejected
+# rather than ignored, and every duration, size and enum is validated at startup
+# as well as on reload — so a typo is reported with the file path and the reason,
+# instead of silently doing nothing or killing the mount.
+#
+# Durations accept s, m, h, d, w and compound forms: "30s", "15m", "1h30m", "30d".
+# Sizes are 1024-based, matching rclone: "8M", "25G".
+#
+# Check a config without starting anything:   onedrived --check-config
+# See what is wrong and how to fix it:        onedrive-tui doctor
 
-[log]
-# file = "~/.local/share/onedrive-mount/daemon.log"
-# level = "INFO"   # DEBUG | INFO | NOTICE | ERROR
-# NOTE: log settings require a daemon restart to take effect.
-# They are not reloaded on config change like mount/sync settings are.
+[daemon]
+# Verbosity of our own log.
+log_level = "info"            # error | warn | info | debug | trace
+
+# Verbosity passed to rclone children. Deliberately a separate setting: sharing
+# one knob is how the old setup produced a 1.4 GB rclone log the first time
+# anyone turned on debug logging to look at a sync problem.
+rclone_log_level = "notice"   # error | notice | info | debug
+
+# Retention is enforced hourly by age *and* total size, and the file currently
+# being written is never deleted.
+log_retention_days = 7
+log_retention_size = "200M"
+
+
+[[remote]]
+# The rclone remote name, without the trailing colon. Must already exist in
+# rclone.conf — create it with `rclone config`.
+name = "onedrive-timm"
+
+# Where you browse your files. This is our own FUSE overlay, not the rclone
+# mount: it stays listable when you are offline, because directory metadata
+# comes from a local index rather than rclone's in-memory cache.
+mount_point = "~/OneDrive"
+
+enabled = true
+
+
+[remote.mount]
+# Overrides rclone's --cache-dir. Leave unset for ~/.cache/onedrive/<remote>/rclone.
+# cache_dir = "~/.cache/onedrive/onedrive-timm"
+
+# "full" or "writes" are required for offline reads to work at all, because the
+# cache is where an offline read is served from. Validation rejects "off" and
+# "minimal" while the overlay is enabled.
+vfs_cache_mode = "full"
+
+# How long a downloaded file stays available offline. Raised from the old 72h:
+# this single value decides whether a file you read last week still opens on a
+# train with no signal.
+vfs_cache_max_age = "30d"
+vfs_cache_max_size = "25G"
+vfs_cache_min_free_space = "10G"
+
+vfs_write_back = "5s"
+
+# Safe to make long because poll_interval keeps it fresh (OneDrive supports
+# change notification) and the local index is the offline fallback.
+# Written in canonical form: durations normalise on save, so "72h" becomes "3d".
+dir_cache_time = "3d"
+
+# Must be smaller than dir_cache_time — rclone enforces this and exits if it is
+# not, so it is checked here where the message can be useful.
+poll_interval = "30s"
+
+# Lowered from 8/8M: this process is resident all day, and the old settings
+# peaked at 1 GB RSS.
+transfers = 4
+checkers = 4
+buffer_size = "8M"
+vfs_read_chunk_size = "32M"
+
+# Escape hatch for rclone flags we do not model. One argv element per entry, so
+# write --flag=value; the space form is rejected rather than silently failing.
+extra_flags = []
+
+
+[remote.overlay]
+# false exposes the rclone mount directly at mount_point and gives up offline
+# directory listings. The documented fallback if the overlay's read path costs
+# too much latency on your hardware.
+enabled = true
+
+
+[remote.index]
+# A full crawl is relatively expensive, so it is occasional; browsing keeps the
+# paths you actually use fresh for free (see opportunistic, below).
+full_crawl_interval = "24h"
+
+# Update the index from directory listings your own browsing already triggers.
+opportunistic = true
+
+# rclone --tpslimit for crawls, to stay under OneDrive's throttling.
+tpslimit = 10
+
+
+[remote.offline]
+# What happens when you write to a file under mount_point while offline.
+#   queue    — stage it locally and upload on reconnect, but only after
+#              re-verifying the remote still matches the version you started
+#              from; if it changed, your copy is uploaded alongside it as a
+#              conflict file and nothing is overwritten.
+#   reject   — fail the write immediately with a clear error.
+#   readonly — refuse all writes while offline.
+writes = "queue"
+
+# Visible on purpose, so pending uploads can be inspected in a file manager.
+outbox_dir = "~/OneDrive.pending"
+
+
+# A pinned folder is a real local directory, always complete, synced in both
+# directions. This is the right place for anything that must work offline.
+[[remote.pin]]
+name = "Keepass"
+remote_path = "Dokumente/Keepass"   # relative to the remote root, no leading /
+local_path = "~/onedrive-keepass"   # must not be inside any mount point
+
+# Floor on how often it syncs. Combined with sync_on_change this is usually not
+# the thing that triggers a sync.
+interval = "5m"
+
+# Sync on local change too (debounced). This is what gets a database save to
+# OneDrive in seconds rather than up to a full interval later — and syncing
+# sooner is itself the best way to avoid conflicts in the first place.
+sync_on_change = true
+
+# What to do when both sides changed.
+#   keep-both  — newer content keeps the canonical name, the other version is
+#                kept beside it with a timestamped suffix. Nothing is discarded.
+#   newer-wins — newer content wins; the loser is only in .versions/.
+conflict = "keep-both"
+
+# Let conflict copies propagate to OneDrive too, so a conflict can be merged
+# from any machine.
+upload_conflict_copies = true
+
+# Abort the run if more than this PERCENTAGE of files would be deleted. rclone's
+# --max-delete is a percentage despite its name; 50 is its own default. Lower is
+# more protective but aborts more often — on a one-file pin any delete is 100%,
+# so a tight value means a genuine delete never propagates.
+max_delete_percent = 50
+
+# Pre-run snapshots into <local_path>/.versions/, which is never synced.
+# These are not a version history — conflict copies already preserve both sides
+# of a real conflict. They exist for the case a conflict copy cannot cover: a
+# delete propagating from one side to the other, which produces no second copy.
+versions = true
+versions_retention = "14d"
+versions_max_size = "50M"
+
+# Include filters. Empty means everything, which is the usual case. Editor and
+# lock-file noise (*.lock, *.tmp, .goutputstream*, ~$*) is always excluded.
+patterns = []
+
+enabled = true
