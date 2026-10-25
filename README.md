@@ -9,7 +9,7 @@ conflicted file in favor of another.
 
 ```nix
 {
-  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.0";
+  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.1";
 
   outputs = { nixpkgs, onedrive-rc, ... }: {
     nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
@@ -85,7 +85,7 @@ the component READMEs for *how*.
 ```nix
 { config, pkgs, lib, ... }:
 let
-  onedrive-rc = builtins.getFlake "github:Yolo-TM/onedrive-mount/v0.3.0";
+  onedrive-rc = builtins.getFlake "github:Yolo-TM/onedrive-mount/v0.3.1";
 in {
   imports = [ onedrive-rc.nixosModules.default ];
   services.onedrive-rc = {
@@ -111,7 +111,7 @@ VFS/FUSE defaults the example file documents.
 
 ```nix
 {
-  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.0";
+  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.1";
 
   outputs = { home-manager, onedrive-rc, ... }: {
     homeConfigurations.yourusername = home-manager.lib.homeManagerConfiguration {
