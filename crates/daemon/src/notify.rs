@@ -191,7 +191,7 @@ impl Notifier {
                 Some("org.freedesktop.Notifications"),
                 "Notify",
                 &(
-                    "onedrive-rc",    // app_name
+                    "onedrive-rc", // app_name
                     replaces,      // replaces_id
                     "folder-sync", // app_icon
                     alert.summary(),

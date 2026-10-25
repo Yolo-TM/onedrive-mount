@@ -88,7 +88,10 @@ fn main() -> Result<()> {
     let paths = Paths::from_env();
 
     if args.print_unit {
-        print!("{}", onedrive_rc_core::unit::render(&std::env::current_exe()?));
+        print!(
+            "{}",
+            onedrive_rc_core::unit::render(&std::env::current_exe()?)
+        );
         return Ok(());
     }
 

@@ -489,7 +489,11 @@ mod tests {
             "[daemon]\nlog_retention_size = \"1M\"\n",
         )
         .unwrap();
-        std::fs::write(paths.log_dir().join("onedrive-rcd.jsonl"), vec![b'x'; 3 << 20]).unwrap();
+        std::fs::write(
+            paths.log_dir().join("onedrive-rcd.jsonl"),
+            vec![b'x'; 3 << 20],
+        )
+        .unwrap();
 
         let check = check_logs(&paths);
         assert_eq!(check.verdict, Verdict::Warn, "{check:?}");

@@ -1838,7 +1838,11 @@ mod tests {
 
         let log_dir = app.paths.log_dir();
         std::fs::create_dir_all(&log_dir).unwrap();
-        std::fs::write(log_dir.join("onedrive-rcd.jsonl.2020-01-01"), vec![b'x'; 1000]).unwrap();
+        std::fs::write(
+            log_dir.join("onedrive-rcd.jsonl.2020-01-01"),
+            vec![b'x'; 1000],
+        )
+        .unwrap();
         std::fs::write(log_dir.join("onedrive-rcd.jsonl"), vec![b'x'; 10]).unwrap();
 
         prune_logs(&app);

@@ -357,7 +357,10 @@ mod tests {
             p.lock_file(),
             Path::new("/home/t/.local/state/onedrive-rc/daemon.lock")
         );
-        assert_eq!(p.log_dir(), Path::new("/home/t/.local/state/onedrive-rc/log"));
+        assert_eq!(
+            p.log_dir(),
+            Path::new("/home/t/.local/state/onedrive-rc/log")
+        );
         assert_eq!(
             p.socket(),
             Path::new("/home/t/.run/onedrive-rc/onedrive-rcd.sock")
@@ -393,7 +396,9 @@ mod tests {
         assert_eq!(
             p.vfs_cached_file("timm", "Dokumente/Keepass/Timm.kdbx")
                 .unwrap(),
-            Path::new("/home/t/.cache/onedrive-rc/timm/rclone/vfs/timm/Dokumente/Keepass/Timm.kdbx")
+            Path::new(
+                "/home/t/.cache/onedrive-rc/timm/rclone/vfs/timm/Dokumente/Keepass/Timm.kdbx"
+            )
         );
         assert_eq!(
             p.vfs_meta_file("timm", "Dokumente/Keepass/Timm.kdbx")

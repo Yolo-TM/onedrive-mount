@@ -214,7 +214,8 @@ mod tests {
             other => panic!("expected Held, got {other:?}"),
         }
         assert!(
-            err.to_string().starts_with("onedrive-rcd is already running"),
+            err.to_string()
+                .starts_with("onedrive-rcd is already running"),
             "{err}"
         );
 
