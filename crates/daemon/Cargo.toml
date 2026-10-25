@@ -1,18 +1,18 @@
 [package]
-name = "onedrived"
+name = "onedrive-rcd"
 version = "0.3.0"
 edition = "2024"
 
 [lib]
-name = "onedrived"
+name = "onedrive_rcd"
 path = "src/lib.rs"
 
 [[bin]]
-name = "onedrived"
+name = "onedrive-rcd"
 path = "src/main.rs"
 
 [dependencies]
-onedrive-core      = { workspace = true }
+onedrive-rc-core   = { workspace = true }
 anyhow             = { workspace = true }
 chrono             = { workspace = true }
 libc               = { workspace = true }

@@ -7,7 +7,7 @@
 use std::fmt::Write as _;
 
 use chrono::{DateTime, Duration, Utc};
-use onedrive_core::ipc::{
+use onedrive_rc_core::ipc::{
     ConflictInfo, Health, MountState, NetworkState, OutboxInfo, PinStatus, ReportSource,
     StatusReport,
 };
@@ -167,14 +167,14 @@ pub fn conflicts(list: &[ConflictInfo], now: DateTime<Utc>) -> String {
         out,
         "Merge them yourself, delete the extra copy, and this clears on its own.\n\
          Or decide now:\n  \
-         onedrive-tui conflicts resolve <id> --keep local|remote|both\n\
+         onedrive-rc conflicts resolve <id> --keep local|remote|both\n\
          `both` keeps every file and only stops the alert; `local`/`remote` \
          discard the other\nversion into .versions/ and sync the result."
     );
     out
 }
 
-/// The `onedrive-tui outbox` screen.
+/// The `onedrive-rc outbox` screen.
 pub fn outbox(rows: &[OutboxInfo], now: DateTime<Utc>) -> String {
     if rows.is_empty() {
         return "outbox empty\n".to_string();
@@ -203,14 +203,14 @@ pub fn outbox(rows: &[OutboxInfo], now: DateTime<Utc>) -> String {
     let _ = writeln!(
         out,
         "\nIt replays automatically on reconnect, or now:\n  \
-         onedrive-tui outbox retry [<remote>]\n\
+         onedrive-rc outbox retry [<remote>]\n\
          To drop one without uploading it:\n  \
-         onedrive-tui outbox discard <id>"
+         onedrive-rc outbox discard <id>"
     );
     out
 }
 
-/// The `onedrive-tui status` screen.
+/// The `onedrive-rc status` screen.
 pub fn status(report: &StatusReport, now: DateTime<Utc>) -> String {
     let mut out = String::new();
     let (health, why) = report.health();
@@ -218,7 +218,7 @@ pub fn status(report: &StatusReport, now: DateTime<Utc>) -> String {
     if report.source == ReportSource::Database {
         let _ = writeln!(
             out,
-            "⚠ onedrived is not answering. Showing its last recorded state from {} ago.\n",
+            "⚠ onedrive-rcd is not answering. Showing its last recorded state from {} ago.\n",
             ago(report.heartbeat_at, now)
         );
     }
@@ -316,7 +316,7 @@ pub fn status(report: &StatusReport, now: DateTime<Utc>) -> String {
     if report.conflicts > 0 {
         let _ = writeln!(
             out,
-            "{:<7} {:<22} {} see: onedrive-tui conflicts",
+            "{:<7} {:<22} {} see: onedrive-rc conflicts",
             "conflict",
             format!("{} unresolved", report.conflicts),
             dot(Health::Degraded),
@@ -360,7 +360,7 @@ fn shorten(path: &str) -> String {
 mod tests {
     use super::*;
     use chrono::TimeZone;
-    use onedrive_core::ipc::{
+    use onedrive_rc_core::ipc::{
         IndexStatus, LogStatus, OutboxStatus, PinStatus, RemoteStatus, StatusReport,
     };
 
@@ -523,7 +523,7 @@ mod tests {
 
     fn report() -> StatusReport {
         StatusReport {
-            protocol: onedrive_core::ipc::PROTOCOL_VERSION,
+            protocol: onedrive_rc_core::ipc::PROTOCOL_VERSION,
             source: ReportSource::Daemon,
             version: "0.3.0".into(),
             pid: 1234,
@@ -559,7 +559,7 @@ mod tests {
             conflicts: 0,
             outbox: OutboxStatus::default(),
             log: LogStatus {
-                dir: "/home/t/.local/state/onedrive/log".into(),
+                dir: "/home/t/.local/state/onedrive-rc/log".into(),
                 bytes: 12 << 20,
             },
         }
@@ -589,7 +589,7 @@ mod tests {
         let out = status(&r, now());
         assert!(out.contains("degraded"), "{out}");
         assert!(out.contains("1 unresolved conflict"), "{out}");
-        assert!(out.contains("onedrive-tui conflicts"), "{out}");
+        assert!(out.contains("onedrive-rc conflicts"), "{out}");
         assert!(out.contains("pin Keepass is conflicted"), "{out}");
     }
 
@@ -602,7 +602,7 @@ mod tests {
         r.heartbeat_age_secs = 1800;
 
         let out = status(&r, now());
-        assert!(out.starts_with("⚠ onedrived is not answering"), "{out}");
+        assert!(out.starts_with("⚠ onedrive-rcd is not answering"), "{out}");
         assert!(out.contains("30m ago"), "{out}");
         assert!(out.contains("broken"), "{out}");
     }

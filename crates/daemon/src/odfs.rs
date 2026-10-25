@@ -43,9 +43,9 @@ use fuser::{
     ReplyAttr, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite,
     ReplyXattr, Request,
 };
-use onedrive_core::config::RemoteConfig;
-use onedrive_core::paths::{Paths, join_guarded};
-use onedrive_core::state::{NodeInput, NodeRecord, Store};
+use onedrive_rc_core::config::RemoteConfig;
+use onedrive_rc_core::paths::{Paths, join_guarded};
+use onedrive_rc_core::state::{NodeInput, NodeRecord, Store};
 
 /// How long the kernel may cache an entry/attr before asking again. Short on
 /// purpose: every lookup already re-stats the live path when it can, so a
@@ -998,7 +998,7 @@ impl Odfs {
         let mut config = fuser::Config::default();
         config
             .mount_options
-            .push(fuser::MountOption::FSName("onedrive".into()));
+            .push(fuser::MountOption::FSName("onedrive-rc".into()));
         fuser::mount(self, mount_point, &config)
     }
 
@@ -1009,7 +1009,7 @@ impl Odfs {
         let mut config = fuser::Config::default();
         config
             .mount_options
-            .push(fuser::MountOption::FSName("onedrive".into()));
+            .push(fuser::MountOption::FSName("onedrive-rc".into()));
         fuser::spawn_mount(self, mount_point, &config)
     }
 
@@ -1160,7 +1160,7 @@ mod tests {
         std::fs::write(backing.join("notes.txt"), "hello").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"
             [[remote]]
             name = "od"
@@ -1172,7 +1172,7 @@ mod tests {
 
         let fs = Odfs::new(&remote.remotes[0], &paths).unwrap();
         // Point the backing mount at our tempdir directly rather than the
-        // real `.cache/onedrive/od/mount` layout, matching how the backing
+        // real `.cache/onedrive-rc/od/mount` layout, matching how the backing
         // mount would appear once P1's supervisor actually mounts there.
         let fs = Odfs { backing, ..fs };
 
@@ -1192,7 +1192,7 @@ mod tests {
         std::fs::write(backing.join("notes.txt"), "hello").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"
             [[remote]]
             name = "od"
@@ -1228,7 +1228,7 @@ mod tests {
         std::fs::write(pin_local.join("Timm.kdbx"), "entries").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"
             [[remote]]
             name = "od"
@@ -1263,7 +1263,7 @@ mod tests {
         std::fs::write(pin_local.join("Timm.kdbx"), "entries!!").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"
             [[remote]]
             name = "od"
@@ -1329,7 +1329,7 @@ mod tests {
         std::fs::create_dir_all(backing.join("sub")).unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"[[remote]]
             name = "od"
             mount_point = "{root}/OneDrive""#,
@@ -1369,7 +1369,7 @@ mod tests {
         std::fs::write(backing.join("notes.txt"), "entries").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"[[remote]]
             name = "od"
             mount_point = "{root}/OneDrive""#,
@@ -1424,7 +1424,7 @@ mod tests {
         std::fs::write(backing.join("notes.txt"), "hello").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"[[remote]]
             name = "od"
             mount_point = "{root}/OneDrive""#,
@@ -1482,7 +1482,7 @@ mod tests {
         std::fs::create_dir_all(&mount_point).unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"[[remote]]
             name = "od"
             mount_point = "{root}/OneDrive""#,
@@ -1530,7 +1530,7 @@ mod tests {
         std::fs::write(backing.join("notes.txt"), "entries").unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"[[remote]]
             name = "od"
             mount_point = "{root}/OneDrive""#,
@@ -1570,7 +1570,7 @@ mod tests {
         std::fs::create_dir_all(&mount_point).unwrap();
 
         let paths = Paths::rooted(dir.path().join("home"));
-        let remote: onedrive_core::config::Config = toml::from_str(&format!(
+        let remote: onedrive_rc_core::config::Config = toml::from_str(&format!(
             r#"[[remote]]
             name = "od"
             mount_point = "{root}/OneDrive""#,

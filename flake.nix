@@ -1,5 +1,5 @@
 {
-  description = "onedrive — reliable OneDrive access on Linux, built on rclone";
+  description = "onedrive-rc — reliable OneDrive access on Linux, built on rclone";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -17,7 +17,7 @@
 
   outputs = { self, nixpkgs, rust-overlay, flake-utils, home-manager }:
     let
-      onedriveModule = import ./nix/nixos-module.nix { inherit self; };
+      onedriveRcModule = import ./nix/nixos-module.nix { inherit self; };
       homeManagerModule = import ./nix/home-manager-module.nix { inherit self; };
 
     in flake-utils.lib.eachDefaultSystem (system:
@@ -39,8 +39,8 @@
             && !(pkgs.lib.hasPrefix ".git/" rel);
         };
 
-        onedrive = pkgs.rustPlatform.buildRustPackage {
-          pname = "onedrive";
+        onedrive-rc = pkgs.rustPlatform.buildRustPackage {
+          pname = "onedrive-rc";
           version = coreToml.package.version;
 
           inherit src;
@@ -51,8 +51,8 @@
           # rusqlite is built with its bundled SQLite, and fuser talks to
           # /dev/fuse directly — the only native requirement is a C compiler,
           # which stdenv already provides. No X11/GL, no pkg-config.
-          cargoBuildFlags = [ "-p" "onedrived" "-p" "onedrive-tui" ];
-          cargoTestFlags = [ "-p" "onedrive-core" "-p" "onedrived" "-p" "onedrive-tui" ];
+          cargoBuildFlags = [ "-p" "onedrive-rcd" "-p" "onedrive-rc" ];
+          cargoTestFlags = [ "-p" "onedrive-rc-core" "-p" "onedrive-rcd" "-p" "onedrive-rc" ];
 
           # The Nix build sandbox has no `/dev/fuse` and no privilege to mount
           # one, so odfs's and the mount supervisor's tests that spawn a real
@@ -89,53 +89,53 @@
 
           postInstall = ''
             install -Dm644 config.example.toml \
-              $out/share/doc/onedrive/config.example.toml
+              $out/share/doc/onedrive-rc/config.example.toml
           '';
 
           meta = with pkgs.lib; {
             description = "Reliable OneDrive access on Linux, built on rclone";
             homepage = "https://github.com/Yolo-TM/onedrive-mount";
             platforms = platforms.linux;
-            mainProgram = "onedrive-tui";
+            mainProgram = "onedrive-rc";
           };
         };
 
       in {
         packages = {
-          default = onedrive;
-          inherit onedrive;
+          default = onedrive-rc;
+          inherit onedrive-rc;
         };
 
         apps = {
-          onedrived = {
+          onedrive-rcd = {
             type = "app";
-            program = "${onedrive}/bin/onedrived";
+            program = "${onedrive-rc}/bin/onedrive-rcd";
           };
           tui = {
             type = "app";
-            program = "${onedrive}/bin/onedrive-tui";
+            program = "${onedrive-rc}/bin/onedrive-rc";
           };
           # default app defined inline — avoids referencing self.apps.${system}
           # which breaks pure flake evaluation
           default = {
             type = "app";
-            program = "${onedrive}/bin/onedrive-tui";
+            program = "${onedrive-rc}/bin/onedrive-rc";
           };
         };
 
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = [ rustToolchain ];
           shellHook = ''
-            echo "onedrive dev shell"
+            echo "onedrive-rc dev shell"
             echo "  cargo test --workspace"
-            echo "  cargo run -p onedrived -- --foreground"
-            echo "  cargo run -p onedrive-tui -- status"
+            echo "  cargo run -p onedrive-rcd -- --foreground"
+            echo "  cargo run -p onedrive-rc -- status"
           '';
         };
 
         # Builds a standalone Home Manager generation against
         # ./nix/home-manager-module.nix, so a broken option or a TOML that
-        # onedrive-core would reject is caught by `nix flake check` instead of
+        # onedrive-rc-core would reject is caught by `nix flake check` instead of
         # at `home-manager switch` on someone's machine.
         checks.home-manager-module =
           (home-manager.lib.homeManagerConfiguration {
@@ -147,7 +147,7 @@
                 home.homeDirectory = "/home/test";
                 home.stateVersion = "24.05";
 
-                services.onedrive = {
+                services.onedrive-rc = {
                   enable = true;
                   remotes.onedrive-test = {
                     mount_point = "~/OneDrive";
@@ -161,9 +161,9 @@
             ];
           }).activationPackage;
       }) // {
-        nixosModules.default = onedriveModule;
-        nixosModules.onedrive = onedriveModule;
+        nixosModules.default = onedriveRcModule;
+        nixosModules.onedrive-rc = onedriveRcModule;
         homeManagerModules.default = homeManagerModule;
-        homeManagerModules.onedrive = homeManagerModule;
+        homeManagerModules.onedrive-rc = homeManagerModule;
       };
 }

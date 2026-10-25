@@ -18,14 +18,14 @@ use std::time::Duration;
 
 use anyhow::Result;
 use chrono::Utc;
-use onedrive_core::config::Config;
-use onedrive_core::ipc::{
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::ipc::{
     self, IndexStatus, LogStatus, MountState, NetworkState, OutboxStatus, PinStatus, RemoteStatus,
     ReportSource, Request, Response, StatusReport,
 };
-use onedrive_core::paths::Paths;
-use onedrive_core::state::{DaemonState, PinState, Store};
-use onedrive_core::{Code, VERSION, log as corelog};
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::state::{DaemonState, PinState, Store};
+use onedrive_rc_core::{Code, VERSION, log as corelog};
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, info, warn};
 
@@ -435,7 +435,7 @@ impl App {
                     return Response::err(
                         Code::Config,
                         "pins",
-                        "no pins are configured; add one with `onedrive-tui pin add`",
+                        "no pins are configured; add one with `onedrive-rc pin add`",
                     );
                 }
 
@@ -894,7 +894,7 @@ fn prune_logs(app: &Arc<App>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::ipc::Health;
+    use onedrive_rc_core::ipc::Health;
 
     fn test_app(home: &std::path::Path, config: Config) -> Arc<App> {
         let paths = Paths::rooted(home);
@@ -1838,12 +1838,12 @@ mod tests {
 
         let log_dir = app.paths.log_dir();
         std::fs::create_dir_all(&log_dir).unwrap();
-        std::fs::write(log_dir.join("onedrived.jsonl.2020-01-01"), vec![b'x'; 1000]).unwrap();
-        std::fs::write(log_dir.join("onedrived.jsonl"), vec![b'x'; 10]).unwrap();
+        std::fs::write(log_dir.join("onedrive-rcd.jsonl.2020-01-01"), vec![b'x'; 1000]).unwrap();
+        std::fs::write(log_dir.join("onedrive-rcd.jsonl"), vec![b'x'; 10]).unwrap();
 
         prune_logs(&app);
-        assert!(!log_dir.join("onedrived.jsonl.2020-01-01").exists());
-        assert!(log_dir.join("onedrived.jsonl").exists());
+        assert!(!log_dir.join("onedrive-rcd.jsonl.2020-01-01").exists());
+        assert!(log_dir.join("onedrive-rcd.jsonl").exists());
     }
 
     #[test]

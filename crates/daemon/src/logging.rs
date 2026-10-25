@@ -16,8 +16,8 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use onedrive_core::config::LogLevel;
-use onedrive_core::log::LOG_PREFIX;
+use onedrive_rc_core::config::LogLevel;
+use onedrive_rc_core::log::LOG_PREFIX;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{EnvFilter, fmt};
@@ -31,7 +31,7 @@ pub struct LogGuard(#[allow(dead_code)] WorkerGuard);
 /// Factored out so tests can exercise the *production* configuration against a
 /// writer they control, instead of asserting against a duplicated copy of it.
 /// Keeping the timestamp format here in step with what
-/// `onedrive_core::log::Record` parses is the contract between the daemon's
+/// `onedrive_rc_core::log::Record` parses is the contract between the daemon's
 /// writer and the CLI's renderer.
 fn json_layer<S>(
     writer: impl for<'a> fmt::MakeWriter<'a> + Send + Sync + 'static,
@@ -106,7 +106,7 @@ mod tests {
         );
     }
 
-    /// The daemon's JSONL layer must emit exactly what `onedrive_core::log` can
+    /// The daemon's JSONL layer must emit exactly what `onedrive_rc_core::log` can
     /// parse back — that contract is the whole reason there is one log stream
     /// instead of two.
     ///
@@ -117,7 +117,7 @@ mod tests {
     fn the_json_layer_emits_records_the_cli_can_parse() {
         use std::sync::{Arc, Mutex};
 
-        use onedrive_core::log::{Level, Record};
+        use onedrive_rc_core::log::{Level, Record};
         use tracing_subscriber::prelude::*;
 
         /// Collects written bytes so the assertion needs no file or flush.
@@ -166,11 +166,11 @@ mod tests {
         assert_eq!(record.message(), "deferred: no network");
         assert_eq!(record.subject(), "pin/Keepass");
         assert_eq!(record.fields.pin.as_deref(), Some("Keepass"));
-        assert_eq!(record.code(), Some(onedrive_core::Code::Offline));
+        assert_eq!(record.code(), Some(onedrive_rc_core::Code::Offline));
     }
 
     /// `init` must actually produce a file with the expected name shape, which
-    /// is what `onedrive-tui log` and the retention pruner both key off.
+    /// is what `onedrive-rc log` and the retention pruner both key off.
     #[test]
     fn init_creates_a_log_file_with_the_expected_name() {
         let dir = tempfile::tempdir().unwrap();

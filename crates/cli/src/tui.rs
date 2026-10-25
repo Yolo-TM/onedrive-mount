@@ -1,4 +1,4 @@
-//! `onedrive-tui` with no subcommand: the ratatui dashboard.
+//! `onedrive-rc` with no subcommand: the ratatui dashboard.
 //!
 //! Five panes (`Tab`/`Shift+Tab` to switch): Overview, Pins, Conflicts,
 //! Outbox, Log. `r` refreshes now; refresh also happens on its own every
@@ -10,7 +10,7 @@
 //!
 //! Reads the same way every other command does: [`client::status`] already
 //! falls back to the state database when the daemon is not answering, so the
-//! Overview pane degrades the same way `onedrive-tui status` does. Conflicts
+//! Overview pane degrades the same way `onedrive-rc status` does. Conflicts
 //! and Outbox are IPC-only (there is no read-only database fallback for
 //! them), so a down daemon just shows them empty rather than stale or wrong.
 
@@ -24,8 +24,8 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use onedrive_core::ipc::{ConflictInfo, Keep, OutboxInfo, PinStatus, Request, Response};
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::ipc::{ConflictInfo, Keep, OutboxInfo, PinStatus, Request, Response};
+use onedrive_rc_core::paths::Paths;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -130,7 +130,7 @@ fn enter_request(
 struct State {
     pane: Pane,
     selected: usize,
-    status: Option<onedrive_core::ipc::StatusReport>,
+    status: Option<onedrive_rc_core::ipc::StatusReport>,
     conflicts: Vec<ConflictInfo>,
     outbox: Vec<OutboxInfo>,
     log: Vec<String>,
@@ -191,7 +191,7 @@ impl State {
         self.message = Some(match client::try_request(paths, &req) {
             Ok(Some(Response::Ok { msg })) => msg,
             Ok(Some(Response::Err { msg, .. })) => format!("error: {msg}"),
-            Ok(Some(_)) | Ok(None) => "onedrived is not running".to_string(),
+            Ok(Some(_)) | Ok(None) => "onedrive-rcd is not running".to_string(),
             Err(e) => format!("error: {e:#}"),
         });
         self.refresh(paths);
@@ -304,7 +304,7 @@ fn draw(f: &mut Frame, state: &State) {
 fn draw_tabs(f: &mut Frame, area: Rect, pane: Pane) {
     let titles: Vec<Line> = PANES.iter().map(|p| Line::from(p.title())).collect();
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL).title("onedrive-tui"))
+        .block(Block::default().borders(Borders::ALL).title("onedrive-rc"))
         .select(pane.index())
         .highlight_style(Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED));
     f.render_widget(tabs, area);
@@ -316,8 +316,8 @@ fn draw_body(f: &mut Frame, area: Rect, state: &State) {
         Pane::Overview => {
             let text = match &state.status {
                 Some(report) => render::status(report, now),
-                None => "onedrived is not running and has never recorded any state.\n\
-                          Run `onedrive-tui setup` to get started."
+                None => "onedrive-rcd is not running and has never recorded any state.\n\
+                          Run `onedrive-rc setup` to get started."
                     .to_string(),
             };
             f.render_widget(

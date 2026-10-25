@@ -46,13 +46,13 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Build
-        run: nix build .#onedrive
+        run: nix build .#onedrive-rc
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp result/bin/onedrived      dist/onedrived-x86_64-linux-nix
-          cp result/bin/onedrive-tui   dist/onedrive-tui-x86_64-linux-nix
+          cp result/bin/onedrive-rcd      dist/onedrive-rcd-x86_64-linux-nix
+          cp result/bin/onedrive-rc   dist/onedrive-rc-x86_64-linux-nix
 
       - uses: actions/upload-artifact@v4
         with:
@@ -69,13 +69,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: cargo build --release -p onedrived -p onedrive-tui
+        run: cargo build --release -p onedrive-rcd -p onedrive-rc
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp target/release/onedrived    dist/onedrived-x86_64-linux
-          cp target/release/onedrive-tui dist/onedrive-tui-x86_64-linux
+          cp target/release/onedrive-rcd    dist/onedrive-rcd-x86_64-linux
+          cp target/release/onedrive-rc dist/onedrive-rc-x86_64-linux
 
       - uses: actions/upload-artifact@v4
         with:
@@ -99,13 +99,13 @@ jobs:
         run: sudo apt-get install -y musl-tools
 
       - name: Build (static)
-        run: cargo build --release -p onedrived -p onedrive-tui --target x86_64-unknown-linux-musl
+        run: cargo build --release -p onedrive-rcd -p onedrive-rc --target x86_64-unknown-linux-musl
 
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          cp target/x86_64-unknown-linux-musl/release/onedrived    dist/onedrived-x86_64-linux-musl
-          cp target/x86_64-unknown-linux-musl/release/onedrive-tui dist/onedrive-tui-x86_64-linux-musl
+          cp target/x86_64-unknown-linux-musl/release/onedrive-rcd    dist/onedrive-rcd-x86_64-linux-musl
+          cp target/x86_64-unknown-linux-musl/release/onedrive-rc dist/onedrive-rc-x86_64-linux-musl
 
       - uses: actions/upload-artifact@v4
         with:

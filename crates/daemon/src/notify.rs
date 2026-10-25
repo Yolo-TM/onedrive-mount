@@ -90,7 +90,7 @@ impl Alert {
                 out
             }
             Self::Refused { msg, .. } => {
-                format!("{msg}\n\nNothing was changed. Run `onedrive-tui doctor` for checks.")
+                format!("{msg}\n\nNothing was changed. Run `onedrive-rc doctor` for checks.")
             }
         }
     }
@@ -135,7 +135,7 @@ impl Notifier {
                 tracing::warn!(
                     error = %e,
                     "no session bus: conflicts will be reported in the log and \
-                     `onedrive-tui status`, but not on screen"
+                     `onedrive-rc status`, but not on screen"
                 );
                 Self {
                     conn: None,
@@ -191,7 +191,7 @@ impl Notifier {
                 Some("org.freedesktop.Notifications"),
                 "Notify",
                 &(
-                    "onedrive",    // app_name
+                    "onedrive-rc",    // app_name
                     replaces,      // replaces_id
                     "folder-sync", // app_icon
                     alert.summary(),

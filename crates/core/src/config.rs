@@ -888,7 +888,7 @@ versions_max_size      = "50M"
         assert_eq!(c.daemon.rclone_log_level, RcloneLogLevel::Notice);
         assert_eq!(
             r.rclone_cache_dir(&paths()),
-            Path::new("/home/t/.cache/onedrive/od/rclone")
+            Path::new("/home/t/.cache/onedrive-rc/od/rclone")
         );
     }
 
@@ -1146,10 +1146,10 @@ versions_max_size      = "50M"
 
     #[test]
     fn load_reports_a_missing_file_with_its_path() {
-        let err = Config::load(Path::new("/nonexistent/onedrive/config.toml")).unwrap_err();
+        let err = Config::load(Path::new("/nonexistent/onedrive-rc/config.toml")).unwrap_err();
         assert_eq!(err.code, Code::Config);
         assert!(
-            err.msg.contains("/nonexistent/onedrive/config.toml"),
+            err.msg.contains("/nonexistent/onedrive-rc/config.toml"),
             "{}",
             err.msg
         );

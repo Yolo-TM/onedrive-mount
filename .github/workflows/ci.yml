@@ -63,27 +63,27 @@ jobs:
           export HOME="$(mktemp -d)"
           export XDG_RUNTIME_DIR="$(mktemp -d)"
 
-          "$BIN/onedrived" --version
-          "$BIN/onedrive-tui" --version
-          "$BIN/onedrived" --print-unit | grep -q 'Type=notify'
+          "$BIN/onedrive-rcd" --version
+          "$BIN/onedrive-rc" --version
+          "$BIN/onedrive-rcd" --print-unit | grep -q 'Type=notify'
 
           # No config yet: --check-config must fail cleanly with its own code.
-          if "$BIN/onedrived" --check-config; then
+          if "$BIN/onedrive-rcd" --check-config; then
             echo "expected --check-config to fail with no config present" >&2
             exit 1
           fi
 
-          mkdir -p "$HOME/.config/onedrive"
-          cp config.example.toml "$HOME/.config/onedrive/config.toml"
-          "$BIN/onedrived" --check-config
+          mkdir -p "$HOME/.config/onedrive-rc"
+          cp config.example.toml "$HOME/.config/onedrive-rc/config.toml"
+          "$BIN/onedrive-rcd" --check-config
 
-          "$BIN/onedrived" &
+          "$BIN/onedrive-rcd" &
           DAEMON=$!
           trap 'kill $DAEMON 2>/dev/null || true' EXIT
 
           # Wait for readiness via the control socket rather than a fixed sleep.
           for _ in $(seq 1 50); do
-            if "$BIN/onedrive-tui" status --json >/dev/null 2>&1; then break; fi
+            if "$BIN/onedrive-rc" status --json >/dev/null 2>&1; then break; fi
             sleep 0.2
           done
 
@@ -95,15 +95,15 @@ jobs:
           # under `pipefail` that killed the step before `log`/`doctor` ever
           # ran. Only the "did we actually reach the daemon" check below is
           # what this step is for.
-          STATUS_JSON="$("$BIN/onedrive-tui" status --json || true)"
+          STATUS_JSON="$("$BIN/onedrive-rc" status --json || true)"
           echo "$STATUS_JSON"
           echo "$STATUS_JSON" | grep -q '"source": "daemon"'
-          "$BIN/onedrive-tui" log -n 5
+          "$BIN/onedrive-rc" log -n 5
           # doctor exits 1 on warnings, which a CI box legitimately has.
-          "$BIN/onedrive-tui" doctor || [ $? -le 1 ]
+          "$BIN/onedrive-rc" doctor || [ $? -le 1 ]
 
           # A second instance must refuse rather than racing the first.
-          if "$BIN/onedrived"; then
+          if "$BIN/onedrive-rcd"; then
             echo "expected a second daemon to be refused" >&2
             exit 1
           fi
@@ -119,4 +119,4 @@ jobs:
       - name: Evaluate the flake
         run: nix flake check --no-build
       - name: Build the daemon and CLI
-        run: nix build .#onedrive
+        run: nix build .#onedrive-rc

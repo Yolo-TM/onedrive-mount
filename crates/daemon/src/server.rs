@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use onedrive_core::ipc::{self, MAX_FRAME_BYTES, Request, Response};
+use onedrive_rc_core::ipc::{self, MAX_FRAME_BYTES, Request, Response};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::watch;
@@ -95,7 +95,7 @@ async fn handle(stream: UnixStream, app: Arc<App>) -> Result<()> {
                 app.handle(req).await
             }
             Err(e) => Response::err(
-                onedrive_core::Code::Internal,
+                onedrive_rc_core::Code::Internal,
                 "ipc",
                 format!("could not parse request: {e}"),
             ),
@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn bind_replaces_a_stale_socket_file() {
         let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("onedrived.sock");
+        let socket = dir.path().join("onedrive-rcd.sock");
 
         // Simulate what a SIGKILLed daemon leaves behind.
         std::fs::write(&socket, b"stale").unwrap();
@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn bind_creates_the_runtime_directory() {
         let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("nested/onedrived.sock");
+        let socket = dir.path().join("nested/onedrive-rcd.sock");
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()

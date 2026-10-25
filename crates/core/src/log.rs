@@ -1,7 +1,7 @@
 //! The log format, its human rendering, and retention.
 //!
-//! One stream, JSON lines, at `~/.local/state/onedrive/log/onedrived.jsonl.<date>`.
-//! The daemon writes it; `onedrive-tui log` renders it. rclone's own output is
+//! One stream, JSON lines, at `~/.local/state/onedrive-rc/log/onedrive-rcd.jsonl.<date>`.
+//! The daemon writes it; `onedrive-rc log` renders it. rclone's own output is
 //! parsed from its `--use-json-log` stdout and re-emitted into *this* stream, so
 //! there is one timeline in one format rather than two files with different
 //! timestamp precision that cannot be merged.
@@ -21,7 +21,7 @@ use crate::code::Code;
 
 /// Base name the daemon hands to its rolling appender; rotated files get a
 /// `.YYYY-MM-DD` suffix appended by the appender.
-pub const LOG_PREFIX: &str = "onedrived.jsonl";
+pub const LOG_PREFIX: &str = "onedrive-rcd.jsonl";
 
 // ---------------------------------------------------------------------------
 // Records
@@ -100,7 +100,7 @@ impl Record {
     /// `pin/Keepass` style label, falling back to the tracing target.
     ///
     /// The crate prefix is stripped from the fallback: every line comes from
-    /// this daemon, so `onedrived::lifecycle` carries no more information than
+    /// this daemon, so `onedrive_rcd::lifecycle` carries no more information than
     /// `lifecycle` while costing eleven characters of a fixed-width column.
     pub fn subject(&self) -> &str {
         self.fields
@@ -110,7 +110,7 @@ impl Record {
             .or(self.fields.remote.as_deref())
             .unwrap_or_else(|| {
                 self.target
-                    .strip_prefix("onedrived::")
+                    .strip_prefix("onedrive_rcd::")
                     .unwrap_or(&self.target)
             })
     }
@@ -191,7 +191,7 @@ impl Filter {
 const SUBJECT_WIDTH: usize = 19;
 const CODE_WIDTH: usize = 15;
 
-/// Render one record the way `onedrive-tui log` shows it.
+/// Render one record the way `onedrive-rc log` shows it.
 ///
 /// Fixed-width columns so the eye can scan down them, with the hint on a
 /// continuation line aligned under the message.
@@ -289,7 +289,7 @@ fn collect(dir: &Path) -> std::io::Result<Vec<Rotated>> {
             continue;
         }
 
-        // `onedrived.jsonl` (current) or `onedrived.jsonl.2026-10-08` (rotated).
+        // `onedrive-rcd.jsonl` (current) or `onedrive-rcd.jsonl.2026-10-08` (rotated).
         let date = name
             .strip_prefix(LOG_PREFIX)
             .and_then(|rest| rest.strip_prefix('.'))
@@ -371,7 +371,7 @@ mod tests {
         Record {
             timestamp: at(10, 40, 43),
             level,
-            target: "onedrived".into(),
+            target: "onedrive-rcd".into(),
             fields: Fields {
                 message: Some(msg.into()),
                 code: code.map(Into::into),
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn parses_the_json_shape_tracing_subscriber_emits() {
-        let line = r#"{"timestamp":"2026-10-08T10:40:43.564763916Z","level":"WARN","target":"onedrived::pins","fields":{"message":"deferred: no network","code":"E_OFFLINE","subject":"pin/Keepass","pin":"Keepass"}}"#;
+        let line = r#"{"timestamp":"2026-10-08T10:40:43.564763916Z","level":"WARN","target":"onedrive_rcd::pins","fields":{"message":"deferred: no network","code":"E_OFFLINE","subject":"pin/Keepass","pin":"Keepass"}}"#;
         let r = Record::parse_line(line).unwrap();
         assert_eq!(r.level, Level::Warn);
         assert_eq!(r.code(), Some(Code::Offline));
@@ -404,7 +404,7 @@ mod tests {
     fn the_crate_prefix_is_stripped_from_the_fallback_subject() {
         let mut r = record(Level::Info, None, "x", "m");
         r.fields.subject = None;
-        r.target = "onedrived::lifecycle".into();
+        r.target = "onedrive_rcd::lifecycle".into();
         assert_eq!(r.subject(), "lifecycle");
 
         r.target = "something_else::bit".into();
@@ -530,7 +530,7 @@ mod tests {
         assert!(
             lines[1]
                 .trim_start()
-                .starts_with("fix: onedrive-tui setup --reauth onedrive-timm"),
+                .starts_with("fix: onedrive-rc setup --reauth onedrive-timm"),
             "{out}"
         );
         // The hint lines up under the message column.

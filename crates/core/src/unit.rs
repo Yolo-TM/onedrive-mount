@@ -24,7 +24,7 @@
 
 use std::path::Path;
 
-pub const UNIT_NAME: &str = "onedrived.service";
+pub const UNIT_NAME: &str = "onedrive-rcd.service";
 
 /// Render the unit for a daemon installed at `binary`.
 pub fn render(binary: &Path) -> String {
@@ -62,9 +62,9 @@ mod tests {
 
     #[test]
     fn renders_the_documented_unit() {
-        let unit = render(Path::new("/home/t/.nix-profile/bin/onedrived"));
+        let unit = render(Path::new("/home/t/.nix-profile/bin/onedrive-rcd"));
 
-        assert!(unit.contains("ExecStart=/home/t/.nix-profile/bin/onedrived"));
+        assert!(unit.contains("ExecStart=/home/t/.nix-profile/bin/onedrive-rcd"));
         assert!(unit.contains("Type=notify"));
         assert!(unit.contains("NotifyAccess=main"));
         assert!(unit.contains("WatchdogSec=60"));
@@ -76,7 +76,7 @@ mod tests {
     /// Regression guards for the specific mistakes in the old unit.
     #[test]
     fn does_not_repeat_the_old_units_mistakes() {
-        let unit = render(Path::new("/usr/bin/onedrived"));
+        let unit = render(Path::new("/usr/bin/onedrive-rcd"));
 
         assert!(
             !unit.contains("network-online.target\n"),
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn is_a_single_trailing_newline_terminated_file() {
-        let unit = render(Path::new("/usr/bin/onedrived"));
+        let unit = render(Path::new("/usr/bin/onedrive-rcd"));
         assert!(unit.ends_with("default.target\n"));
         assert!(!unit.ends_with("\n\n"));
     }

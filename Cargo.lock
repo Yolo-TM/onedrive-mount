@@ -970,7 +970,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "onedrive-core"
+name = "onedrive-rc"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "crossterm 0.29.0",
+ "onedrive-rc-core",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
+name = "onedrive-rc-core"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -984,23 +1000,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "onedrive-tui"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "crossterm 0.29.0",
- "onedrive-core",
- "ratatui",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
-]
-
-[[package]]
-name = "onedrived"
+name = "onedrive-rcd"
 version = "0.3.0"
 dependencies = [
  "anyhow",
@@ -1010,7 +1010,7 @@ dependencies = [
  "futures-core",
  "libc",
  "notify",
- "onedrive-core",
+ "onedrive-rc-core",
  "serde",
  "serde_json",
  "tempfile",

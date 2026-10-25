@@ -32,15 +32,15 @@ impl std::fmt::Display for LockError {
                 pid: Some(pid),
                 comm: Some(comm),
             } => {
-                write!(f, "onedrived is already running (pid {pid}, {comm})")
+                write!(f, "onedrive-rcd is already running (pid {pid}, {comm})")
             }
             Self::Held {
                 pid: Some(pid),
                 comm: None,
             } => {
-                write!(f, "onedrived is already running (pid {pid})")
+                write!(f, "onedrive-rcd is already running (pid {pid})")
             }
-            Self::Held { .. } => f.write_str("onedrived is already running"),
+            Self::Held { .. } => f.write_str("onedrive-rcd is already running"),
             Self::Io(e) => write!(f, "cannot take the daemon lock: {e}"),
         }
     }
@@ -214,7 +214,7 @@ mod tests {
             other => panic!("expected Held, got {other:?}"),
         }
         assert!(
-            err.to_string().starts_with("onedrived is already running"),
+            err.to_string().starts_with("onedrive-rcd is already running"),
             "{err}"
         );
 

@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use onedrive_core::ipc::Keep;
+use onedrive_rc_core::ipc::Keep;
 use tracing::info;
 
 use crate::bisync::VERSIONS_DIR;

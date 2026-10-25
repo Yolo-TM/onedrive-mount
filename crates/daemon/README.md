@@ -1,8 +1,8 @@
-# onedrived
+# onedrive-rcd
 
 The background daemon. One process per machine, controlled over a Unix
-socket by [`onedrive-tui`](../cli/README.md) and configured from
-`~/.config/onedrive/config.toml` (schema and every default:
+socket by [`onedrive-rc`](../cli/README.md) and configured from
+`~/.config/onedrive-rc/config.toml` (schema and every default:
 [`config.example.toml`](../../config.example.toml)).
 
 See [`docs/OVERHAUL.md`](../../docs/OVERHAUL.md) for the full design and the
@@ -21,21 +21,21 @@ data-safety contract (§4) everything here exists to uphold.
 | **outbox** | offline writes staged to disk, replayed on reconnect only after re-verifying the remote still matches what the edit started from |
 | **alerts** | `org.freedesktop.Notifications` — conflicts and other problems stay visible until actually resolved |
 | **log** | one rotated JSONL stream; rclone's own JSON log is parsed and merged in, not kept separate |
-| **ipc** | the Unix socket `onedrive-tui` talks to |
+| **ipc** | the Unix socket `onedrive-rc` talks to |
 
 ## Running it
 
 Normally you don't — the systemd user service does
-(`onedrive-tui service install`, or the NixOS module). To run it yourself,
+(`onedrive-rc service install`, or the NixOS module). To run it yourself,
 e.g. while debugging:
 
 ```sh
-onedrived --foreground    # logs to stderr instead of the JSONL file
+onedrive-rcd --foreground    # logs to stderr instead of the JSONL file
 ```
 
 ```sh
-onedrived --check-config  # validate config.toml and exit; what `doctor` uses
-onedrived --print-unit    # print the systemd unit this daemon expects to run under
+onedrive-rcd --check-config  # validate config.toml and exit; what `doctor` uses
+onedrive-rcd --print-unit    # print the systemd unit this daemon expects to run under
 ```
 
 Only one instance runs per user at a time (`flock` + a PID/identity check); a
@@ -44,16 +44,16 @@ second invocation refuses rather than racing the first.
 ## Logs and state
 
 ```sh
-systemctl --user status onedrived
-journalctl --user -u onedrived -f
+systemctl --user status onedrive-rcd
+journalctl --user -u onedrive-rcd -f
 ```
 
-- `~/.local/state/onedrive/log/onedrived.jsonl` — the one log stream (daily
+- `~/.local/state/onedrive-rc/log/onedrive-rcd.jsonl` — the one log stream (daily
   rotation, retention controlled by `config.toml`'s `[daemon]` section).
-  Read it with `onedrive-tui log`, not directly — that's what applies the
+  Read it with `onedrive-rc log`, not directly — that's what applies the
   level/remote/pin filters and the human-readable rendering.
-- `~/.local/state/onedrive/state.db` — SQLite (WAL): the offline index, pin
-  state, open conflicts, the outbox, and recent events. `onedrive-tui`
+- `~/.local/state/onedrive-rc/state.db` — SQLite (WAL): the offline index, pin
+  state, open conflicts, the outbox, and recent events. `onedrive-rc`
   reads this directly (read-only) when the daemon isn't answering, which is
   why `status`/`ls`/`find` still work with the daemon down — clearly marked
   as stale rather than silently looking live.
@@ -61,7 +61,7 @@ journalctl --user -u onedrived -f
 ## Testing
 
 ```sh
-cargo test -p onedrived
+cargo test -p onedrive-rcd
 ```
 
 The safety-critical pin-sync behaviour (`crates/daemon/tests/safety_matrix.rs`)

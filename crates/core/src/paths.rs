@@ -13,7 +13,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
 /// Application name used as the directory component under each XDG base.
-pub const APP: &str = "onedrive";
+pub const APP: &str = "onedrive-rc";
 
 /// A unix socket path has to fit in `sockaddr_un.sun_path`, which is 108 bytes
 /// including the terminating NUL on Linux. Staying well under that leaves room
@@ -97,7 +97,7 @@ impl Paths {
         &self.config
     }
 
-    /// `~/.config/onedrive/config.toml`
+    /// `~/.config/onedrive-rc/config.toml`
     pub fn config_file(&self) -> PathBuf {
         self.config.join("config.toml")
     }
@@ -118,7 +118,7 @@ impl Paths {
         {
             return PathBuf::from(explicit);
         }
-        // `self.config` is `<base>/onedrive`; rclone lives beside us under the
+        // `self.config` is `<base>/onedrive-rc`; rclone lives beside us under the
         // same XDG config base.
         match self.config.parent() {
             Some(base) => base.join("rclone").join("rclone.conf"),
@@ -132,7 +132,7 @@ impl Paths {
         &self.state
     }
 
-    /// `~/.local/state/onedrive/state.db`
+    /// `~/.local/state/onedrive-rc/state.db`
     pub fn state_db(&self) -> PathBuf {
         self.state.join("state.db")
     }
@@ -142,14 +142,14 @@ impl Paths {
         self.state.join("daemon.lock")
     }
 
-    /// `~/.local/state/onedrive/log`
+    /// `~/.local/state/onedrive-rc/log`
     pub fn log_dir(&self) -> PathBuf {
         self.state.join("log")
     }
 
     /// Base name that `tracing-appender` suffixes with the rotation date.
     pub fn log_file_prefix(&self) -> &'static str {
-        "onedrived.jsonl"
+        "onedrive-rcd.jsonl"
     }
 
     /// bisync's `--workdir`, holding the prior-run listings for one pin.
@@ -206,14 +206,14 @@ impl Paths {
         &self.socket_dir
     }
 
-    /// The IPC socket `onedrive-tui` connects to.
+    /// The IPC socket `onedrive-rc` connects to.
     ///
-    /// Normally `$XDG_RUNTIME_DIR/onedrive/onedrived.sock`. If that would exceed
+    /// Normally `$XDG_RUNTIME_DIR/onedrive-rc/onedrive-rcd.sock`. If that would exceed
     /// the kernel's `sun_path` limit it falls back to a short `/tmp` path (see
     /// [`choose_socket_dir`]); the daemon and the CLI derive this identically,
     /// so they always agree on where to meet.
     pub fn socket(&self) -> PathBuf {
-        self.socket_dir.join("onedrived.sock")
+        self.socket_dir.join("onedrive-rcd.sock")
     }
 
     /// rclone's remote-control socket for one remote.
@@ -275,7 +275,7 @@ fn choose_socket_dir(runtime: &Path, uid: u32) -> PathBuf {
     if runtime.as_os_str().len() + LONGEST_SOCKET_NAME <= SOCKET_PATH_MAX {
         return runtime.to_path_buf();
     }
-    PathBuf::from(format!("/tmp/onedrive-{uid}-{:08x}", digest(runtime)))
+    PathBuf::from(format!("/tmp/onedrive-rc-{uid}-{:08x}", digest(runtime)))
 }
 
 /// FNV-1a. Not a security boundary — it only has to separate distinct paths.
@@ -347,29 +347,29 @@ mod tests {
         let p = paths();
         assert_eq!(
             p.config_file(),
-            Path::new("/home/t/.config/onedrive/config.toml")
+            Path::new("/home/t/.config/onedrive-rc/config.toml")
         );
         assert_eq!(
             p.state_db(),
-            Path::new("/home/t/.local/state/onedrive/state.db")
+            Path::new("/home/t/.local/state/onedrive-rc/state.db")
         );
         assert_eq!(
             p.lock_file(),
-            Path::new("/home/t/.local/state/onedrive/daemon.lock")
+            Path::new("/home/t/.local/state/onedrive-rc/daemon.lock")
         );
-        assert_eq!(p.log_dir(), Path::new("/home/t/.local/state/onedrive/log"));
+        assert_eq!(p.log_dir(), Path::new("/home/t/.local/state/onedrive-rc/log"));
         assert_eq!(
             p.socket(),
-            Path::new("/home/t/.run/onedrive/onedrived.sock")
+            Path::new("/home/t/.run/onedrive-rc/onedrive-rcd.sock")
         );
         assert!(!p.socket_is_fallback());
         assert_eq!(
             p.backing_mount("timm"),
-            Path::new("/home/t/.cache/onedrive/timm/mount")
+            Path::new("/home/t/.cache/onedrive-rc/timm/mount")
         );
         assert_eq!(
             p.bisync_workdir("timm", "Keepass"),
-            Path::new("/home/t/.local/state/onedrive/bisync/timm/Keepass")
+            Path::new("/home/t/.local/state/onedrive-rc/bisync/timm/Keepass")
         );
     }
 
@@ -393,13 +393,13 @@ mod tests {
         assert_eq!(
             p.vfs_cached_file("timm", "Dokumente/Keepass/Timm.kdbx")
                 .unwrap(),
-            Path::new("/home/t/.cache/onedrive/timm/rclone/vfs/timm/Dokumente/Keepass/Timm.kdbx")
+            Path::new("/home/t/.cache/onedrive-rc/timm/rclone/vfs/timm/Dokumente/Keepass/Timm.kdbx")
         );
         assert_eq!(
             p.vfs_meta_file("timm", "Dokumente/Keepass/Timm.kdbx")
                 .unwrap(),
             Path::new(
-                "/home/t/.cache/onedrive/timm/rclone/vfsMeta/timm/Dokumente/Keepass/Timm.kdbx"
+                "/home/t/.cache/onedrive-rc/timm/rclone/vfsMeta/timm/Dokumente/Keepass/Timm.kdbx"
             )
         );
     }
@@ -412,7 +412,7 @@ mod tests {
         assert!(p.vfs_cached_file("timm", "/etc/passwd").is_some()); // leading / is stripped
         assert_eq!(
             p.vfs_cached_file("timm", "/etc/passwd").unwrap(),
-            Path::new("/home/t/.cache/onedrive/timm/rclone/vfs/timm/etc/passwd")
+            Path::new("/home/t/.cache/onedrive-rc/timm/rclone/vfs/timm/etc/passwd")
         );
         assert!(p.vfs_cached_file("timm", "./a/./b").is_some());
     }
@@ -472,7 +472,7 @@ mod tests {
         let dir = choose_socket_dir(&long, 1811);
 
         let text = dir.to_string_lossy();
-        assert!(text.starts_with("/tmp/onedrive-1811-"), "{text}");
+        assert!(text.starts_with("/tmp/onedrive-rc-1811-"), "{text}");
         assert!(
             dir.as_os_str().len() + LONGEST_SOCKET_NAME <= SOCKET_PATH_MAX,
             "{text}"
@@ -499,8 +499,8 @@ mod tests {
 
     #[test]
     fn a_normal_runtime_dir_is_used_as_is() {
-        let dir = choose_socket_dir(Path::new("/run/user/1811/onedrive"), 1811);
-        assert_eq!(dir, Path::new("/run/user/1811/onedrive"));
+        let dir = choose_socket_dir(Path::new("/run/user/1811/onedrive-rc"), 1811);
+        assert_eq!(dir, Path::new("/run/user/1811/onedrive-rc"));
     }
 
     /// Every socket we create has to fit, including the longest name. This is
@@ -529,14 +529,14 @@ mod tests {
         assert!(
             deep.socket()
                 .to_string_lossy()
-                .starts_with("/tmp/onedrive-"),
+                .starts_with("/tmp/onedrive-rc-"),
             "{}",
             deep.socket().display()
         );
         assert!(
             deep.rc_socket("od")
                 .to_string_lossy()
-                .starts_with("/tmp/onedrive-"),
+                .starts_with("/tmp/onedrive-rc-"),
             "rc sockets must share the fallback: {}",
             deep.rc_socket("od").display()
         );
@@ -553,7 +553,7 @@ mod tests {
         let p = Paths::rooted("/home/t");
         assert_eq!(
             p.rc_socket("onedrive-timm"),
-            Path::new("/home/t/.run/onedrive/rc-onedrive-timm.sock")
+            Path::new("/home/t/.run/onedrive-rc/rc-onedrive-timm.sock")
         );
         assert_ne!(p.rc_socket("a"), p.rc_socket("b"));
         assert_ne!(p.rc_socket("a"), p.socket());

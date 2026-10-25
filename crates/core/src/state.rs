@@ -102,7 +102,7 @@ CREATE TABLE outbox (
 );
 CREATE INDEX outbox_state ON outbox(state);
 
--- Recent activity, for the TUI and `onedrive-tui status`. Pruned by row count.
+-- Recent activity, for the TUI and `onedrive-rc status`. Pruned by row count.
 CREATE TABLE event (
   id      INTEGER PRIMARY KEY,
   ts      INTEGER NOT NULL,
@@ -400,7 +400,7 @@ impl Store {
         if current as usize > MIGRATIONS.len() {
             anyhow::bail!(
                 "state database is at schema version {current}, but this build only knows {}. \
-                 Upgrade onedrived, or move {} aside to start fresh.",
+                 Upgrade onedrive-rcd, or move {} aside to start fresh.",
                 MIGRATIONS.len(),
                 "state.db"
             );
@@ -882,7 +882,7 @@ impl Store {
     }
 
     /// Every outbox row not yet resolved, oldest first — what
-    /// `onedrive-tui outbox ls` shows and what a replay pass works through.
+    /// `onedrive-rc outbox ls` shows and what a replay pass works through.
     pub fn open_outbox(&self) -> Result<Vec<OutboxRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, remote, path, staged_path, base_size, base_quickxor,
@@ -1066,7 +1066,7 @@ impl Store {
     }
 
     /// Paths whose relative path contains `needle`, case-insensitively,
-    /// ordered by path. What `onedrive-tui find` runs against — a plain
+    /// ordered by path. What `onedrive-rc find` runs against — a plain
     /// substring match, not a glob engine, which is enough to locate a file by
     /// name without pulling in a pattern-matching dependency for it.
     pub fn search(&self, remote: &str, needle: &str) -> Result<Vec<NodeRecord>> {

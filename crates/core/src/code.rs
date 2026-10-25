@@ -86,22 +86,22 @@ impl Code {
     pub const fn hint_template(self) -> Option<&'static str> {
         match self {
             Self::Offline => None, // deferring is the correct behaviour; nothing to fix
-            Self::AuthExpired => Some("onedrive-tui setup --reauth {}"),
+            Self::AuthExpired => Some("onedrive-rc setup --reauth {}"),
             Self::MountStale => Some(
-                "the daemon will remount automatically; force it with: onedrive-tui mount remount",
+                "the daemon will remount automatically; force it with: onedrive-rc mount remount",
             ),
             Self::Throttled => Some("OneDrive is throttling; the daemon backs off on its own"),
-            Self::Conflict => Some("both versions were kept; review with: onedrive-tui conflicts"),
+            Self::Conflict => Some("both versions were kept; review with: onedrive-rc conflicts"),
             Self::CheckAccess => Some(
-                "a destructive run was refused because a side looked empty; check with: onedrive-tui doctor",
+                "a destructive run was refused because a side looked empty; check with: onedrive-rc doctor",
             ),
             Self::DiskFull => Some("free space, or lower vfs_cache_max_size for {}"),
-            Self::OutboxStale => Some("inspect queued offline writes: onedrive-tui outbox ls"),
-            Self::IndexStale => Some("refresh the offline index: onedrive-tui index refresh"),
-            Self::Config => Some("check the config: onedrive-tui doctor"),
-            Self::Dependency => Some("install the missing program, then: onedrive-tui doctor"),
+            Self::OutboxStale => Some("inspect queued offline writes: onedrive-rc outbox ls"),
+            Self::IndexStale => Some("refresh the offline index: onedrive-rc index refresh"),
+            Self::Config => Some("check the config: onedrive-rc doctor"),
+            Self::Dependency => Some("install the missing program, then: onedrive-rc doctor"),
             Self::NotImplemented => None,
-            Self::Internal => Some("please report this with: onedrive-tui log --since 1h"),
+            Self::Internal => Some("please report this with: onedrive-rc log --since 1h"),
         }
     }
 
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn hints_substitute_the_subject() {
         let hint = Code::AuthExpired.hint("onedrive-timm").unwrap();
-        assert_eq!(hint, "onedrive-tui setup --reauth onedrive-timm");
+        assert_eq!(hint, "onedrive-rc setup --reauth onedrive-timm");
     }
 
     #[test]

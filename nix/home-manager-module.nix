@@ -1,17 +1,17 @@
-# The Home Manager module: this is where `~/.config/onedrive/config.toml`
+# The Home Manager module: this is where `~/.config/onedrive-rc/config.toml`
 # comes from when you don't want to hand-write TOML. Every option here mirrors
 # a key documented in ../config.example.toml, with the same defaults, so the
 # two stay interchangeable — write the file by hand, or declare it here, or
 # start from here and drop to extra_flags/patterns for anything unmodelled.
 #
-# Durations and sizes stay plain strings ("30d", "25G"): onedrive-core parses
+# Durations and sizes stay plain strings ("30d", "25G"): onedrive-rc-core parses
 # and re-validates them itself (crates/core/src/units.rs), so re-typing that
 # grammar as a Nix type would only be a second, weaker copy of checks that
 # already happen at daemon startup with a much better error message.
 { self }:
 { config, lib, pkgs, ... }:
 let
-  cfg = config.services.onedrive;
+  cfg = config.services.onedrive-rc;
   inherit (lib) mkEnableOption mkOption types;
 
   tomlFormat = pkgs.formats.toml { };
@@ -114,7 +114,7 @@ let
         cache_dir = mkOption {
           type = types.nullOr types.str;
           default = null;
-          description = "Overrides rclone's --cache-dir. Defaults to ~/.cache/onedrive/<remote>/rclone.";
+          description = "Overrides rclone's --cache-dir. Defaults to ~/.cache/onedrive-rc/<remote>/rclone.";
         };
         vfs_cache_mode = mkOption {
           type = types.enum [ "off" "minimal" "writes" "full" ];
@@ -249,7 +249,7 @@ let
     pin = lib.mapAttrsToList pinToToml r.pins;
   };
 
-  configToml = tomlFormat.generate "onedrive-config.toml" {
+  configToml = tomlFormat.generate "onedrive-rc-config.toml" {
     daemon = {
       inherit (cfg.daemon)
         log_level rclone_log_level log_retention_days log_retention_size;
@@ -257,21 +257,21 @@ let
     remote = lib.mapAttrsToList remoteToToml cfg.remotes;
   };
 in {
-  options.services.onedrive = {
-    enable = mkEnableOption "the onedrive daemon, with its config declared here";
+  options.services.onedrive-rc = {
+    enable = mkEnableOption "the onedrive-rc daemon, with its config declared here";
 
     package = mkOption {
       type = types.package;
-      default = self.packages.${pkgs.stdenv.hostPlatform.system}.onedrive;
-      description = "The onedrive package to use.";
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.onedrive-rc;
+      description = "The onedrive-rc package to use.";
     };
 
     systemdService.enable = mkOption {
       type = types.bool;
       default = true;
       description = ''
-        Manage the onedrived systemd --user unit. Disable this if you already
-        get it from the NixOS system module (services.onedrive.enable there)
+        Manage the onedrive-rcd systemd --user unit. Disable this if you already
+        get it from the NixOS system module (services.onedrive-rc.enable there)
         and only want this module for config generation — the two define the
         same unit name, and the more specific (this one, per-user) wins if
         both are left enabled, so leaving both on is harmless, just redundant.
@@ -321,7 +321,7 @@ in {
         Remotes to mount, one per `[[remote]]` block in config.toml. The
         attribute name becomes the rclone remote name (and must already exist
         in rclone.conf — this module does not do the OAuth dance; run
-        `onedrive-tui setup` once to authenticate and it will pick up this
+        `onedrive-rc setup` once to authenticate and it will pick up this
         declared config instead of generating its own).
       '';
     };
@@ -330,17 +330,17 @@ in {
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
       home.packages = [ cfg.package pkgs.rclone pkgs.fuse3 ];
-      xdg.configFile."onedrive/config.toml".source = configToml;
+      xdg.configFile."onedrive-rc/config.toml".source = configToml;
     }
     (lib.mkIf cfg.systemdService.enable {
-      systemd.user.services.onedrived = {
+      systemd.user.services.onedrive-rcd = {
         Unit = {
           Description = "OneDrive daemon";
         };
         Service = {
           Type = "notify";
           NotifyAccess = "main";
-          ExecStart = "${cfg.package}/bin/onedrived";
+          ExecStart = "${cfg.package}/bin/onedrive-rcd";
           Restart = "always";
           RestartSec = 2;
           # Never give up restarting; a daemon that stopped trying is useless.

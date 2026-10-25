@@ -25,8 +25,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use onedrive_core::config::PinConfig;
-use onedrive_core::units::Size;
+use onedrive_rc_core::config::PinConfig;
+use onedrive_rc_core::units::Size;
 use tracing::{debug, warn};
 
 use crate::bisync::{SENTINEL, VERSIONS_DIR};
@@ -295,7 +295,7 @@ pub async fn counts(local: &Path) -> HashMap<String, usize> {
 mod tests {
     use super::*;
     use chrono::TimeZone;
-    use onedrive_core::config::Config;
+    use onedrive_rc_core::config::Config;
 
     fn at(h: u32, m: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 10, 8, h, m, 0).unwrap()

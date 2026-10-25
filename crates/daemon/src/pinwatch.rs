@@ -12,8 +12,8 @@
 use std::path::Path;
 
 use notify::{EventKind, RecursiveMode, Watcher};
-use onedrive_core::config::Config;
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::paths::Paths;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 

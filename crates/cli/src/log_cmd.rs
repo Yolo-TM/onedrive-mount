@@ -1,4 +1,4 @@
-//! `onedrive-tui log` — read the one log stream.
+//! `onedrive-rc log` — read the one log stream.
 //!
 //! The whole point of this command is that there *is* one stream to read. The
 //! old setup had two files in two timestamp formats (nanosecond-precision RFC
@@ -11,9 +11,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use clap::Args;
-use onedrive_core::log::{Filter, LOG_PREFIX, Level, render_stream};
-use onedrive_core::paths::Paths;
-use onedrive_core::units::Dur;
+use onedrive_rc_core::log::{Filter, LOG_PREFIX, Level, render_stream};
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::units::Dur;
 
 #[derive(Debug, Args)]
 pub struct LogArgs {
@@ -90,7 +90,7 @@ pub fn run(paths: &Paths, args: &LogArgs) -> Result<()> {
     let mut files = log_files(&dir)?;
     if files.is_empty() {
         anyhow::bail!(
-            "no log files in {}\nthe daemon writes them once it starts: onedrive-tui service restart",
+            "no log files in {}\nthe daemon writes them once it starts: onedrive-rc service restart",
             dir.display()
         );
     }
@@ -231,9 +231,9 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "onedrived.jsonl.2026-10-05",
-                "onedrived.jsonl.2026-10-07",
-                "onedrived.jsonl",
+                "onedrive-rcd.jsonl.2026-10-05",
+                "onedrive-rcd.jsonl.2026-10-07",
+                "onedrive-rcd.jsonl",
             ]
         );
     }

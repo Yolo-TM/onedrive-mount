@@ -1,4 +1,4 @@
-//! `onedrive-tui setup` — one command that finishes the job.
+//! `onedrive-rc setup` — one command that finishes the job.
 //!
 //! The old GUI made completing OAuth step 1 of 4: you then had to find "Add
 //! to config", then "Save" in a status bar, then "Install service", also a
@@ -6,20 +6,20 @@
 //! pins → config written → service installed → linger enabled → first index
 //! crawl queued, in one run. `--reauth <remote>` re-runs just the OAuth half
 //! against an existing remote, which is what `Code::AuthExpired`'s hint
-//! (`onedrive-tui setup --reauth <remote>`) points at.
+//! (`onedrive-rc setup --reauth <remote>`) points at.
 
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use onedrive_core::config::Config;
-use onedrive_core::ipc::Request;
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::ipc::Request;
+use onedrive_rc_core::paths::Paths;
 
 use crate::rclone_wizard::{self, Question};
 use crate::{client, service};
 
-/// How long to wait for `onedrived` to bind its socket after `service
+/// How long to wait for `onedrive-rcd` to bind its socket after `service
 /// install` starts it, before giving up and telling the user to check it
 /// themselves. Starting a daemon and binding a unix socket is fast; this is
 /// generous, not a tight budget.
@@ -58,7 +58,7 @@ fn reauth_remote(paths: &Paths, name: &str) -> Result<i32> {
 }
 
 fn guided(paths: &Paths) -> Result<i32> {
-    println!("onedrive-tui setup\n");
+    println!("onedrive-rc setup\n");
     check_rclone_present()?;
 
     let config_path = paths.config_file();
@@ -114,7 +114,7 @@ fn finish(paths: &Paths) -> Result<i32> {
     println!("\nInstalling the service...");
     print!("{}", service::install(paths)?);
 
-    println!("\nWaiting for onedrived to start...");
+    println!("\nWaiting for onedrive-rcd to start...");
     wait_for_daemon(paths)?;
 
     match client::request(paths, &Request::IndexRefresh { full: true }) {
@@ -128,7 +128,7 @@ fn finish(paths: &Paths) -> Result<i32> {
         crate::render::status(&client::status(paths)?, chrono::Utc::now())
     );
     println!(
-        "\nSetup complete. `onedrive-tui` for the dashboard, `onedrive-tui doctor` to check health."
+        "\nSetup complete. `onedrive-rc` for the dashboard, `onedrive-rc doctor` to check health."
     );
     Ok(0)
 }
@@ -141,7 +141,7 @@ fn wait_for_daemon(paths: &Paths) -> Result<()> {
         }
         if Instant::now() >= deadline {
             bail!(
-                "onedrived did not answer within {}s; check `onedrive-tui service status`",
+                "onedrive-rcd did not answer within {}s; check `onedrive-rc service status`",
                 DAEMON_STARTUP_TIMEOUT.as_secs()
             );
         }

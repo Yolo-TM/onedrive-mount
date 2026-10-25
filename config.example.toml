@@ -1,6 +1,6 @@
-# onedrive — example configuration
+# onedrive-rc — example configuration
 #
-# Lives at ~/.config/onedrive/config.toml
+# Lives at ~/.config/onedrive-rc/config.toml
 #
 # Every value shown here is the default, so a minimal working config is just a
 # [[remote]] block with a name and a mount_point. Unknown keys are rejected
@@ -11,8 +11,8 @@
 # Durations accept s, m, h, d, w and compound forms: "30s", "15m", "1h30m", "30d".
 # Sizes are 1024-based, matching rclone: "8M", "25G".
 #
-# Check a config without starting anything:   onedrived --check-config
-# See what is wrong and how to fix it:        onedrive-tui doctor
+# Check a config without starting anything:   onedrive-rcd --check-config
+# See what is wrong and how to fix it:        onedrive-rc doctor
 
 [daemon]
 # Verbosity of our own log.
@@ -43,8 +43,8 @@ enabled = true
 
 
 [remote.mount]
-# Overrides rclone's --cache-dir. Leave unset for ~/.cache/onedrive/<remote>/rclone.
-# cache_dir = "~/.cache/onedrive/onedrive-timm"
+# Overrides rclone's --cache-dir. Leave unset for ~/.cache/onedrive-rc/<remote>/rclone.
+# cache_dir = "~/.cache/onedrive-rc/onedrive-timm"
 
 # "full" or "writes" are required for offline reads to work at all, because the
 # cache is where an offline read is served from. Validation rejects "off" and

@@ -1,5 +1,5 @@
 # The NixOS system module: installs the package, the systemd --user unit, and
-# fuse/linger plumbing for the users listed in `services.onedrive.users`.
+# fuse/linger plumbing for the users listed in `services.onedrive-rc.users`.
 #
 # This is deliberately *not* where per-remote config (mount points, vfs
 # tuning, pins, ...) lives — that is per-user data and belongs in each user's
@@ -8,16 +8,16 @@
 { self }:
 { config, lib, pkgs, ... }:
 let
-  cfg = config.services.onedrive;
-  pkg = self.packages.${pkgs.stdenv.hostPlatform.system}.onedrive;
+  cfg = config.services.onedrive-rc;
+  pkg = self.packages.${pkgs.stdenv.hostPlatform.system}.onedrive-rc;
 in {
-  options.services.onedrive = {
-    enable = lib.mkEnableOption "onedrive daemon";
+  options.services.onedrive-rc = {
+    enable = lib.mkEnableOption "onedrive-rc daemon";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkg;
-      description = "The onedrive package to use.";
+      description = "The onedrive-rc package to use.";
     };
 
     users = lib.mkOption {
@@ -41,7 +41,7 @@ in {
 
     programs.fuse.userAllowOther = true;
 
-    systemd.user.services.onedrived = {
+    systemd.user.services.onedrive-rcd = {
       description = "OneDrive daemon";
       wantedBy = [ "default.target" ];
 
@@ -51,7 +51,7 @@ in {
       serviceConfig = {
         Type = "notify";
         NotifyAccess = "main";
-        ExecStart = "${cfg.package}/bin/onedrived";
+        ExecStart = "${cfg.package}/bin/onedrive-rcd";
         Restart = "always";
         RestartSec = 2;
         # Never give up restarting; a daemon that has stopped trying is

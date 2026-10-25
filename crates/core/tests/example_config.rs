@@ -2,12 +2,12 @@
 //!
 //! Easy to forget otherwise: `deny_unknown_fields` means a renamed setting turns
 //! the documentation into a file that is actively rejected, and the example is
-//! what `onedrive-tui setup` and the README both point people at.
+//! what `onedrive-rc setup` and the README both point people at.
 
 use std::path::{Path, PathBuf};
 
-use onedrive_core::config::Config;
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::paths::Paths;
 
 fn example_path() -> PathBuf {
     // crates/core -> repo root

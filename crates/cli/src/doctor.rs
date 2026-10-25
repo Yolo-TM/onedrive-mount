@@ -1,4 +1,4 @@
-//! `onedrive-tui doctor` — check the things that actually break, before they do.
+//! `onedrive-rc doctor` — check the things that actually break, before they do.
 //!
 //! Every check that can fail says what to do about it. This exists because the
 //! old setup had no way to answer "why is it not working?" other than reading a
@@ -10,10 +10,10 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 
-use onedrive_core::config::Config;
-use onedrive_core::paths::Paths;
-use onedrive_core::state::Store;
-use onedrive_core::{log as corelog, unit};
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::state::Store;
+use onedrive_rc_core::{log as corelog, unit};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Verdict {
@@ -171,7 +171,7 @@ fn check_config(paths: &Paths) -> Check {
         return Check::warn(
             "config",
             format!("no config at {}", path.display()),
-            "onedrive-tui setup",
+            "onedrive-rc setup",
         );
     }
 
@@ -198,7 +198,7 @@ fn check_state(paths: &Paths) -> Check {
         return Check::warn(
             "state",
             "no state database yet (the daemon creates it on first run)",
-            "onedrive-tui service restart",
+            "onedrive-rc service restart",
         );
     }
     match Store::open_readonly(&db) {
@@ -208,7 +208,7 @@ fn check_state(paths: &Paths) -> Check {
                 format!("readable, last daemon pid {} ({})", d.pid, d.state.as_str()),
             ),
             Ok(None) => Check::ok("state", "readable, no daemon has run yet"),
-            Err(e) => Check::fail("state", format!("unreadable: {e}"), "see: onedrive-tui log"),
+            Err(e) => Check::fail("state", format!("unreadable: {e}"), "see: onedrive-rc log"),
         },
         Err(e) => Check::fail(
             "state",
@@ -221,12 +221,12 @@ fn check_state(paths: &Paths) -> Check {
 fn check_daemon(paths: &Paths) -> Check {
     match crate::client::ping(paths) {
         Ok(Some((version, protocol))) => {
-            if protocol != onedrive_core::ipc::PROTOCOL_VERSION {
+            if protocol != onedrive_rc_core::ipc::PROTOCOL_VERSION {
                 return Check::fail(
                     "daemon",
                     format!(
                         "running {version} speaking protocol {protocol}, but this CLI speaks {}",
-                        onedrive_core::ipc::PROTOCOL_VERSION
+                        onedrive_rc_core::ipc::PROTOCOL_VERSION
                     ),
                     "reinstall so both binaries come from the same build",
                 );
@@ -238,7 +238,7 @@ fn check_daemon(paths: &Paths) -> Check {
                         "running {version}, but this CLI is {}",
                         crate::client::cli_version()
                     ),
-                    "onedrive-tui service restart",
+                    "onedrive-rc service restart",
                 );
             }
             Check::ok("daemon", format!("running {version}"))
@@ -246,9 +246,9 @@ fn check_daemon(paths: &Paths) -> Check {
         Ok(None) => Check::fail(
             "daemon",
             format!("not answering on {}", paths.socket().display()),
-            "onedrive-tui service restart",
+            "onedrive-rc service restart",
         ),
-        Err(e) => Check::fail("daemon", e.to_string(), "onedrive-tui service restart"),
+        Err(e) => Check::fail("daemon", e.to_string(), "onedrive-rc service restart"),
     }
 }
 
@@ -258,7 +258,7 @@ fn check_unit(paths: &Paths) -> Check {
         return Check::warn(
             "service",
             format!("unit not installed at {}", path.display()),
-            "onedrive-tui service install",
+            "onedrive-rc service install",
         );
     }
 
@@ -272,17 +272,17 @@ fn check_unit(paths: &Paths) -> Check {
                 "enabled but not active ({})",
                 active.as_deref().unwrap_or("unknown")
             ),
-            "onedrive-tui service restart",
+            "onedrive-rc service restart",
         ),
         (_, Some("active")) => Check::warn(
             "service",
             "running but not enabled, so it will not start at login",
-            "onedrive-tui service install",
+            "onedrive-rc service install",
         ),
         _ => Check::warn(
             "service",
             "installed but neither enabled nor active",
-            "onedrive-tui service install",
+            "onedrive-rc service install",
         ),
     }
 }
@@ -329,7 +329,7 @@ fn check_logs(paths: &Paths) -> Check {
                 dir.display(),
                 crate::render::bytes(budget)
             ),
-            "the daemon prunes hourly; if this persists, check: onedrive-tui log --level warn",
+            "the daemon prunes hourly; if this persists, check: onedrive-rc log --level warn",
         )
     } else {
         Check::ok(
@@ -408,12 +408,12 @@ mod tests {
     fn rendering_includes_marks_names_and_fixes() {
         let checks = vec![
             Check::ok("rclone", "rclone v1.75.1"),
-            Check::fail("daemon", "not answering", "onedrive-tui service restart"),
+            Check::fail("daemon", "not answering", "onedrive-rc service restart"),
         ];
         let out = render(&checks);
         assert!(out.contains("[ok  ] rclone"), "{out}");
         assert!(out.contains("[FAIL] daemon"), "{out}");
-        assert!(out.contains("fix: onedrive-tui service restart"), "{out}");
+        assert!(out.contains("fix: onedrive-rc service restart"), "{out}");
         assert!(out.contains("1 failure(s)"), "{out}");
     }
 
@@ -489,7 +489,7 @@ mod tests {
             "[daemon]\nlog_retention_size = \"1M\"\n",
         )
         .unwrap();
-        std::fs::write(paths.log_dir().join("onedrived.jsonl"), vec![b'x'; 3 << 20]).unwrap();
+        std::fs::write(paths.log_dir().join("onedrive-rcd.jsonl"), vec![b'x'; 3 << 20]).unwrap();
 
         let check = check_logs(&paths);
         assert_eq!(check.verdict, Verdict::Warn, "{check:?}");

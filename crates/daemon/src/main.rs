@@ -1,4 +1,4 @@
-//! `onedrived` — the OneDrive background daemon.
+//! `onedrive-rcd` — the OneDrive background daemon.
 //!
 //! Startup order is deliberate and differs from the old daemon's:
 //!
@@ -14,17 +14,17 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use onedrive_core::config::Config;
-use onedrive_core::paths::Paths;
-use onedrive_core::state::Store;
-use onedrive_core::{VERSION, log as corelog};
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::state::Store;
+use onedrive_rc_core::{VERSION, log as corelog};
 use tokio::sync::{mpsc, watch};
 use tracing::{error, info, warn};
 
-use onedrived::app::{self, App};
-use onedrived::lock::{self, Lock};
-use onedrived::sdnotify::Notifier;
-use onedrived::{configwatch, logging, mountloop, server};
+use onedrive_rcd::app::{self, App};
+use onedrive_rcd::lock::{self, Lock};
+use onedrive_rcd::sdnotify::Notifier;
+use onedrive_rcd::{configwatch, logging, mountloop, server};
 
 /// Exit codes the shell and systemd can act on.
 mod exit {
@@ -52,7 +52,7 @@ fn parse_args() -> Result<Option<Args>> {
             "--foreground" | "-f" => args.foreground = true,
             "--print-unit" => args.print_unit = true,
             "--version" | "-V" => {
-                println!("onedrived {VERSION}");
+                println!("onedrive-rcd {VERSION}");
                 return Ok(None);
             }
             "--help" | "-h" => {
@@ -66,9 +66,9 @@ fn parse_args() -> Result<Option<Args>> {
 }
 
 const HELP: &str = "\
-onedrived — the OneDrive background daemon
+onedrive-rcd — the OneDrive background daemon
 
-Usage: onedrived [options]
+Usage: onedrive-rcd [options]
 
 Options:
   -f, --foreground   log to stderr in human-readable form instead of JSONL on disk
@@ -78,7 +78,7 @@ Options:
   -h, --help         print this help and exit
 
 The daemon is normally managed by systemd. Install the unit with:
-  onedrive-tui service install
+  onedrive-rc service install
 ";
 
 fn main() -> Result<()> {
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
     let paths = Paths::from_env();
 
     if args.print_unit {
-        print!("{}", onedrive_core::unit::render(&std::env::current_exe()?));
+        print!("{}", onedrive_rc_core::unit::render(&std::env::current_exe()?));
         return Ok(());
     }
 
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
 
     let _log_guard = logging::init(&paths.log_dir(), initial_log_level(&paths), args.foreground)?;
 
-    info!(version = VERSION, "onedrived starting");
+    info!(version = VERSION, "onedrive-rcd starting");
 
     // Taken before anything else touches the state directory.
     let lock = match Lock::acquire(&paths.lock_file()) {
@@ -144,7 +144,7 @@ fn main() -> Result<()> {
 /// Done before full validation on purpose: if the config is broken we still want
 /// the explanation of *why* to be logged, so we fall back to the default level
 /// rather than refusing to log at all.
-fn initial_log_level(paths: &Paths) -> onedrive_core::config::LogLevel {
+fn initial_log_level(paths: &Paths) -> onedrive_rc_core::config::LogLevel {
     Config::load(&paths.config_file())
         .map(|c| c.daemon.log_level)
         .unwrap_or_default()
@@ -154,7 +154,7 @@ fn check_config(paths: &Paths) -> std::result::Result<(), String> {
     let path = paths.config_file();
     if !path.exists() {
         return Err(format!(
-            "no config file at {}\nrun: onedrive-tui setup\n",
+            "no config file at {}\nrun: onedrive-rc setup\n",
             path.display()
         ));
     }
@@ -198,7 +198,7 @@ async fn run(paths: Paths, _args: Args) -> Result<()> {
             }
         }
     } else {
-        info!(path = %config_path.display(), "no config yet; run: onedrive-tui setup");
+        info!(path = %config_path.display(), "no config yet; run: onedrive-rc setup");
         (Config::default(), None)
     };
 
@@ -217,7 +217,7 @@ async fn run(paths: Paths, _args: Args) -> Result<()> {
     if let Some(err) = &config_error {
         app.event(
             corelog::Level::Error,
-            Some(onedrive_core::Code::Config),
+            Some(onedrive_rc_core::Code::Config),
             "config",
             err,
         );
@@ -263,7 +263,7 @@ async fn run(paths: Paths, _args: Args) -> Result<()> {
         Ok(pair) => (pair.0, Some(pair.1)),
         Err(e) => {
             // Not fatal: reloads can still be triggered over IPC or with SIGHUP.
-            warn!(error = %e, "config watching unavailable; use `onedrive-tui service restart` or SIGHUP after edits");
+            warn!(error = %e, "config watching unavailable; use `onedrive-rc service restart` or SIGHUP after edits");
             let (_tx, rx) = mpsc::channel::<()>(1);
             (rx, None)
         }

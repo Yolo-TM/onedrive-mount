@@ -13,9 +13,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use onedrive_core::ipc::NetworkState;
-use onedrive_core::state::DaemonState;
-use onedrive_core::{Code, log as corelog};
+use onedrive_rc_core::ipc::NetworkState;
+use onedrive_rc_core::state::DaemonState;
+use onedrive_rc_core::{Code, log as corelog};
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, info, warn};
 
@@ -329,7 +329,7 @@ async fn reconcile_now(app: &Arc<App>, supervisor: &mut Supervisor) {
     }
     app.retain_mount_status(&names);
 
-    // Keep the daemon state honest, so `systemctl status` and `onedrive-tui
+    // Keep the daemon state honest, so `systemctl status` and `onedrive-rc
     // status` agree about whether anything is wrong.
     let state = if config.remotes.is_empty() {
         DaemonState::Starting
@@ -341,7 +341,7 @@ async fn reconcile_now(app: &Arc<App>, supervisor: &mut Supervisor) {
     app.set_daemon_state(state);
 
     // Surface a mount failure as an event, so it shows up in the TUI and in
-    // `onedrive-tui log` rather than only in the status snapshot.
+    // `onedrive-rc log` rather than only in the status snapshot.
     for name in &names {
         let status = supervisor.status(name);
         if let Some(error) = &status.error {
@@ -357,9 +357,9 @@ async fn reconcile_now(app: &Arc<App>, supervisor: &mut Supervisor) {
 
 /// Find a pin and its remote by name.
 fn find_pin(
-    config: &onedrive_core::config::Config,
+    config: &onedrive_rc_core::config::Config,
     name: &str,
-) -> Option<(String, onedrive_core::config::PinConfig)> {
+) -> Option<(String, onedrive_rc_core::config::PinConfig)> {
     config.enabled_remotes().find_map(|remote| {
         remote
             .pins
@@ -386,7 +386,7 @@ async fn sync_all_pins(
 }
 
 /// Replay queued offline writes: every enabled remote on reconnect, or just
-/// `only` when asked for by name (`onedrive-tui outbox retry`).
+/// `only` when asked for by name (`onedrive-rc outbox retry`).
 async fn replay_outbox_all(app: &Arc<App>, notifier: &mut Notifier, only: Option<&str>) {
     let config = app.config();
     let paths = app.paths.clone();
@@ -411,7 +411,7 @@ async fn replay_outbox_all(app: &Arc<App>, notifier: &mut Notifier, only: Option
     }
 }
 
-/// Crawl every enabled remote, unconditionally. What `onedrive-tui index
+/// Crawl every enabled remote, unconditionally. What `onedrive-rc index
 /// refresh` asks for.
 async fn crawl_all(app: &Arc<App>) {
     let config = app.config();
@@ -449,7 +449,7 @@ async fn crawl_due_remotes(app: &Arc<App>) {
     }
 }
 
-async fn crawl_one(app: &Arc<App>, remote: &onedrive_core::config::RemoteConfig) {
+async fn crawl_one(app: &Arc<App>, remote: &onedrive_rc_core::config::RemoteConfig) {
     let subject = format!("index/{}", remote.name);
     match crate::index::crawl_remote(remote, &app.paths).await {
         Ok(nodes) => {
@@ -481,10 +481,10 @@ async fn crawl_one(app: &Arc<App>, remote: &onedrive_core::config::RemoteConfig)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::VERSION;
-    use onedrive_core::config::Config;
-    use onedrive_core::paths::Paths;
-    use onedrive_core::state::Store;
+    use onedrive_rc_core::VERSION;
+    use onedrive_rc_core::config::Config;
+    use onedrive_rc_core::paths::Paths;
+    use onedrive_rc_core::state::Store;
 
     use crate::sdnotify::Notifier;
 
@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(report.remotes.len(), 1);
         assert_ne!(
             report.remotes[0].state,
-            onedrive_core::ipc::MountState::Mounted,
+            onedrive_rc_core::ipc::MountState::Mounted,
             "a remote that cannot mount must not claim to be mounted"
         );
     }

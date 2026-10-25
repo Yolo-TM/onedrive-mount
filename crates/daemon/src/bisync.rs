@@ -22,9 +22,9 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
-use onedrive_core::Code;
-use onedrive_core::config::{PinConfig, RcloneLogLevel};
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::Code;
+use onedrive_rc_core::config::{PinConfig, RcloneLogLevel};
+use onedrive_rc_core::paths::Paths;
 use serde::Deserialize;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
@@ -237,7 +237,7 @@ pub async fn prepare(pin: &PinConfig, remote: &str, paths: &Paths) -> Result<Pat
 
     let sentinel = local.join(SENTINEL);
     if !sentinel.exists() {
-        tokio::fs::write(&sentinel, b"onedrive --check-access sentinel\n")
+        tokio::fs::write(&sentinel, b"onedrive-rc --check-access sentinel\n")
             .await
             .with_context(|| format!("writing {}", sentinel.display()))?;
     }
@@ -610,7 +610,7 @@ fn emit(line: &str, remote: &str, pin: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::config::Config;
+    use onedrive_rc_core::config::Config;
 
     fn pin() -> PinConfig {
         let config: Config = toml::from_str(

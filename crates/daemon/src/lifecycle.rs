@@ -153,7 +153,7 @@ pub async fn inhibit_sleep(conn: &Connection) -> Option<OwnedFd> {
             "Inhibit",
             &(
                 "sleep",
-                "onedrived",
+                "onedrive-rcd",
                 "checkpointing OneDrive state",
                 "delay",
             ),

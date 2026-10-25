@@ -29,10 +29,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use onedrive_core::Code;
-use onedrive_core::config::{RcloneLogLevel, RemoteConfig};
-use onedrive_core::ipc::MountState;
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::Code;
+use onedrive_rc_core::config::{RcloneLogLevel, RemoteConfig};
+use onedrive_rc_core::ipc::MountState;
+use onedrive_rc_core::paths::Paths;
 use tokio::process::Child;
 use tracing::{debug, error, info, warn};
 
@@ -725,7 +725,7 @@ impl Supervisor {
     }
 
     /// Force an immediate remount, bypassing the backoff. Driven by
-    /// `onedrive-tui mount remount`.
+    /// `onedrive-rc mount remount`.
     pub async fn force_remount(&mut self, name: &str) {
         info!(remote = %name, "remount requested");
         let mount_point = self.recorded_mount_point(name);
@@ -997,7 +997,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut s = Supervisor::new(Paths::rooted(dir.path()));
 
-        let config: onedrive_core::config::Config = toml::from_str(
+        let config: onedrive_rc_core::config::Config = toml::from_str(
             r#"
             [[remote]]
             name = "od"
@@ -1019,7 +1019,7 @@ mod tests {
     #[test]
     fn a_changed_mount_setting_changes_the_argv() {
         let paths = Paths::rooted("/home/t");
-        let config: onedrive_core::config::Config = toml::from_str(
+        let config: onedrive_rc_core::config::Config = toml::from_str(
             r#"
             [[remote]]
             name = "od"
@@ -1033,7 +1033,7 @@ mod tests {
         let before = rclone::mount_args(remote, &paths, &point, RcloneLogLevel::Notice);
 
         let mut changed = remote.clone();
-        changed.mount.vfs_cache_max_size = onedrive_core::Size::parse("50G").unwrap();
+        changed.mount.vfs_cache_max_size = onedrive_rc_core::Size::parse("50G").unwrap();
         let after = rclone::mount_args(&changed, &paths, &point, RcloneLogLevel::Notice);
         assert_ne!(before, after, "a changed size must be visible in the argv");
 
@@ -1111,7 +1111,7 @@ mod tests {
     // odfs mounts successfully anyway, which is the whole reason its lifecycle
     // is tracked separately from `mounts`.
 
-    fn remote_config(extra: &str) -> onedrive_core::config::Config {
+    fn remote_config(extra: &str) -> onedrive_rc_core::config::Config {
         toml::from_str(&format!(
             r#"
             [[remote]]

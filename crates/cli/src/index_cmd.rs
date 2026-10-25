@@ -1,4 +1,4 @@
-//! `onedrive-tui ls` / `find` — offline, straight from the index.
+//! `onedrive-rc ls` / `find` — offline, straight from the index.
 //!
 //! No daemon round-trip: these read the state database directly, the same way
 //! `client::status_from_database` does when the daemon is silent. That is not
@@ -8,9 +8,9 @@
 use std::fmt::Write as _;
 
 use anyhow::{Context, Result};
-use onedrive_core::config::Config;
-use onedrive_core::paths::Paths;
-use onedrive_core::state::{NodeRecord, Store};
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::state::{NodeRecord, Store};
 
 /// Open the index read-only. A clear message if it does not exist yet, rather
 /// than an empty listing that looks like the remote itself is empty.
@@ -19,7 +19,7 @@ fn open_index(paths: &Paths) -> Result<Store> {
     if !db.exists() {
         anyhow::bail!(
             "no offline index yet (no state at {})\n\
-             run `onedrive-tui index refresh` once onedrived is running",
+             run `onedrive-rc index refresh` once onedrive-rcd is running",
             db.display()
         );
     }
@@ -74,7 +74,7 @@ pub fn ls(paths: &Paths, path: Option<&str>) -> Result<String> {
                 None => {
                     let _ = writeln!(
                         out,
-                        "{target}: not in the index (try `onedrive-tui index refresh`)"
+                        "{target}: not in the index (try `onedrive-rc index refresh`)"
                     );
                     continue;
                 }
@@ -124,7 +124,7 @@ pub fn find(paths: &Paths, pattern: &str) -> Result<String> {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use onedrive_core::state::NodeInput;
+    use onedrive_rc_core::state::NodeInput;
 
     fn paths_with_index(home: &std::path::Path) -> Paths {
         let paths = Paths::rooted(home);

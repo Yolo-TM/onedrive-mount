@@ -23,9 +23,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use onedrive_core::config::{Config, PinConfig};
-use onedrive_core::state::PinState;
-use onedrive_core::{Code, log as corelog};
+use onedrive_rc_core::config::{Config, PinConfig};
+use onedrive_rc_core::state::PinState;
+use onedrive_rc_core::{Code, log as corelog};
 use tracing::{debug, info, warn};
 
 use crate::app::App;
@@ -449,7 +449,7 @@ pub async fn resolve_finished(app: &Arc<App>, notifier: &mut Notifier) {
 
 /// Take down notifications for conflicts that were resolved somewhere else.
 ///
-/// `onedrive-tui conflicts resolve` closes the row synchronously so it can
+/// `onedrive-rc conflicts resolve` closes the row synchronously so it can
 /// report a real result, but only this task holds the D-Bus connection. The
 /// `notif_id` left on the resolved row is the handover; clearing it is what
 /// makes this run once per resolution rather than every tick.
@@ -472,7 +472,7 @@ async fn withdraw_resolved(app: &Arc<App>, notifier: &mut Notifier) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::config::Config;
+    use onedrive_rc_core::config::Config;
 
     fn config(interval: &str) -> Config {
         toml::from_str(&format!(

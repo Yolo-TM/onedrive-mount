@@ -1,4 +1,4 @@
-//! `onedrive-tui` — the control surface for `onedrived`.
+//! `onedrive-rc` — the control surface for `onedrive-rcd`.
 //!
 //! One binary: subcommands for scripting, and (from P5) a dashboard when invoked
 //! with no arguments. It replaces a 2,251-line egui GUI whose four-step setup was
@@ -21,13 +21,13 @@ mod tui;
 use anyhow::Result;
 use chrono::Utc;
 use clap::{Args, Parser, Subcommand};
-use onedrive_core::VERSION;
-use onedrive_core::ipc::Request;
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::VERSION;
+use onedrive_rc_core::ipc::Request;
+use onedrive_rc_core::paths::Paths;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "onedrive-tui",
+    name = "onedrive-rc",
     version = VERSION,
     about = "Control and inspect the OneDrive daemon",
     long_about = None,
@@ -143,7 +143,7 @@ enum ConflictAction {
     },
 }
 
-/// Mirrors [`onedrive_core::ipc::Keep`]; separate so the protocol type does not
+/// Mirrors [`onedrive_rc_core::ipc::Keep`]; separate so the protocol type does not
 /// have to depend on clap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum KeepArg {
@@ -152,7 +152,7 @@ enum KeepArg {
     Both,
 }
 
-impl From<KeepArg> for onedrive_core::ipc::Keep {
+impl From<KeepArg> for onedrive_rc_core::ipc::Keep {
     fn from(arg: KeepArg) -> Self {
         match arg {
             KeepArg::Local => Self::Local,
@@ -206,7 +206,7 @@ fn main() {
         Err(e) => {
             // `{:#}` includes the anyhow context chain, which is where the
             // actionable part of the message usually lives.
-            eprintln!("onedrive-tui: {e:#}");
+            eprintln!("onedrive-rc: {e:#}");
             std::process::exit(1);
         }
     }
@@ -286,7 +286,7 @@ fn dispatch(cli: &Cli, paths: &Paths) -> Result<i32> {
             None | Some(ConflictAction::Ls) => {
                 let response = client::request(paths, &Request::ConflictList)?;
                 match response {
-                    onedrive_core::ipc::Response::Conflicts { conflicts: list } => {
+                    onedrive_rc_core::ipc::Response::Conflicts { conflicts: list } => {
                         print!("{}", render::conflicts(&list, Utc::now()));
                         // Non-zero while anything is unresolved, so this can
                         // drive a shell prompt indicator.
@@ -317,7 +317,7 @@ fn dispatch(cli: &Cli, paths: &Paths) -> Result<i32> {
             None | Some(OutboxAction::Ls) => {
                 let response = client::request(paths, &Request::OutboxList)?;
                 match response {
-                    onedrive_core::ipc::Response::Outbox { rows } => {
+                    onedrive_rc_core::ipc::Response::Outbox { rows } => {
                         print!("{}", render::outbox(&rows, Utc::now()));
                         // Non-zero while anything is queued, so this can drive
                         // a shell prompt indicator, same as `conflicts`.
@@ -381,8 +381,8 @@ fn dispatch(cli: &Cli, paths: &Paths) -> Result<i32> {
     }
 }
 
-fn print_response(response: &onedrive_core::ipc::Response) {
-    use onedrive_core::ipc::Response;
+fn print_response(response: &onedrive_rc_core::ipc::Response) {
+    use onedrive_rc_core::ipc::Response;
     match response {
         Response::Ok { msg } => println!("{msg}"),
         Response::Err { code, msg, hint } => {
@@ -392,7 +392,7 @@ fn print_response(response: &onedrive_core::ipc::Response) {
             }
         }
         Response::Pong { version, protocol } => {
-            println!("onedrived {version} (protocol {protocol})");
+            println!("onedrive-rcd {version} (protocol {protocol})");
         }
         Response::Status(_) => println!("ok"),
         Response::Conflicts { conflicts } => print!("{}", render::conflicts(conflicts, Utc::now())),
@@ -400,9 +400,9 @@ fn print_response(response: &onedrive_core::ipc::Response) {
     }
 }
 
-fn exit_for(response: &onedrive_core::ipc::Response) -> i32 {
+fn exit_for(response: &onedrive_rc_core::ipc::Response) -> i32 {
     match response {
-        onedrive_core::ipc::Response::Err { .. } => 1,
+        onedrive_rc_core::ipc::Response::Err { .. } => 1,
         _ => 0,
     }
 }
@@ -420,56 +420,56 @@ mod tests {
     #[test]
     fn parses_the_documented_invocations() {
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "status"]).command,
+            Cli::parse_from(["onedrive-rc", "status"]).command,
             Some(Cmd::Status(StatusArgs { json: false }))
         ));
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "status", "--json"]).command,
+            Cli::parse_from(["onedrive-rc", "status", "--json"]).command,
             Some(Cmd::Status(StatusArgs { json: true }))
         ));
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "doctor"]).command,
+            Cli::parse_from(["onedrive-rc", "doctor"]).command,
             Some(Cmd::Doctor)
         ));
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "service", "install"]).command,
+            Cli::parse_from(["onedrive-rc", "service", "install"]).command,
             Some(Cmd::Service {
                 action: ServiceAction::Install
             })
         ));
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "index", "refresh", "--full"]).command,
+            Cli::parse_from(["onedrive-rc", "index", "refresh", "--full"]).command,
             Some(Cmd::Index {
                 action: IndexAction::Refresh { full: true }
             })
         ));
 
-        match Cli::parse_from(["onedrive-tui", "ls"]).command {
+        match Cli::parse_from(["onedrive-rc", "ls"]).command {
             Some(Cmd::Ls { path }) => assert_eq!(path, None),
             other => panic!("unexpected {other:?}"),
         }
-        match Cli::parse_from(["onedrive-tui", "ls", "Keepass"]).command {
+        match Cli::parse_from(["onedrive-rc", "ls", "Keepass"]).command {
             Some(Cmd::Ls { path }) => assert_eq!(path.as_deref(), Some("Keepass")),
             other => panic!("unexpected {other:?}"),
         }
-        match Cli::parse_from(["onedrive-tui", "find", "Timm"]).command {
+        match Cli::parse_from(["onedrive-rc", "find", "Timm"]).command {
             Some(Cmd::Find { pattern }) => assert_eq!(pattern, "Timm"),
             other => panic!("unexpected {other:?}"),
         }
         assert!(
-            Cli::try_parse_from(["onedrive-tui", "find"]).is_err(),
+            Cli::try_parse_from(["onedrive-rc", "find"]).is_err(),
             "a pattern is required"
         );
 
         // The command the E_MOUNT_STALE hint tells people to run, so it has to
         // exist and parse exactly as written there.
-        match Cli::parse_from(["onedrive-tui", "mount", "remount"]).command {
+        match Cli::parse_from(["onedrive-rc", "mount", "remount"]).command {
             Some(Cmd::Mount {
                 action: MountAction::Remount { remote },
             }) => assert_eq!(remote, None),
             other => panic!("unexpected {other:?}"),
         }
-        match Cli::parse_from(["onedrive-tui", "mount", "remount", "od"]).command {
+        match Cli::parse_from(["onedrive-rc", "mount", "remount", "od"]).command {
             Some(Cmd::Mount {
                 action: MountAction::Remount { remote },
             }) => assert_eq!(remote.as_deref(), Some("od")),
@@ -479,18 +479,18 @@ mod tests {
 
     #[test]
     fn a_bare_invocation_is_reserved_for_the_dashboard() {
-        assert!(Cli::parse_from(["onedrive-tui"]).command.is_none());
+        assert!(Cli::parse_from(["onedrive-rc"]).command.is_none());
     }
 
     #[test]
     fn pin_sync_takes_an_optional_name() {
-        match Cli::parse_from(["onedrive-tui", "pin", "sync"]).command {
+        match Cli::parse_from(["onedrive-rc", "pin", "sync"]).command {
             Some(Cmd::Pin {
                 action: PinAction::Sync { name },
             }) => assert_eq!(name, None),
             other => panic!("unexpected {other:?}"),
         }
-        match Cli::parse_from(["onedrive-tui", "pin", "sync", "Keepass"]).command {
+        match Cli::parse_from(["onedrive-rc", "pin", "sync", "Keepass"]).command {
             Some(Cmd::Pin {
                 action: PinAction::Sync { name },
             }) => {
@@ -505,11 +505,11 @@ mod tests {
     #[test]
     fn conflicts_defaults_to_listing() {
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "conflicts"]).command,
+            Cli::parse_from(["onedrive-rc", "conflicts"]).command,
             Some(Cmd::Conflicts { action: None })
         ));
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "conflicts", "ls"]).command,
+            Cli::parse_from(["onedrive-rc", "conflicts", "ls"]).command,
             Some(Cmd::Conflicts {
                 action: Some(ConflictAction::Ls)
             })
@@ -523,7 +523,7 @@ mod tests {
             ("remote", KeepArg::Remote),
             ("both", KeepArg::Both),
         ] {
-            match Cli::parse_from(["onedrive-tui", "conflicts", "resolve", "3", "--keep", arg])
+            match Cli::parse_from(["onedrive-rc", "conflicts", "resolve", "3", "--keep", arg])
                 .command
             {
                 Some(Cmd::Conflicts {
@@ -538,10 +538,10 @@ mod tests {
 
         // No default: deleting a version of someone's password database is not
         // something to do because a flag was forgotten.
-        assert!(Cli::try_parse_from(["onedrive-tui", "conflicts", "resolve", "3"]).is_err());
+        assert!(Cli::try_parse_from(["onedrive-rc", "conflicts", "resolve", "3"]).is_err());
         assert!(
             Cli::try_parse_from([
-                "onedrive-tui",
+                "onedrive-rc",
                 "conflicts",
                 "resolve",
                 "3",
@@ -557,11 +557,11 @@ mod tests {
     #[test]
     fn outbox_defaults_to_listing() {
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "outbox"]).command,
+            Cli::parse_from(["onedrive-rc", "outbox"]).command,
             Some(Cmd::Outbox { action: None })
         ));
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "outbox", "ls"]).command,
+            Cli::parse_from(["onedrive-rc", "outbox", "ls"]).command,
             Some(Cmd::Outbox {
                 action: Some(OutboxAction::Ls)
             })
@@ -570,34 +570,34 @@ mod tests {
 
     #[test]
     fn outbox_retry_and_discard_parse() {
-        match Cli::parse_from(["onedrive-tui", "outbox", "retry"]).command {
+        match Cli::parse_from(["onedrive-rc", "outbox", "retry"]).command {
             Some(Cmd::Outbox {
                 action: Some(OutboxAction::Retry { remote }),
             }) => assert_eq!(remote, None),
             other => panic!("unexpected {other:?}"),
         }
-        match Cli::parse_from(["onedrive-tui", "outbox", "retry", "onedrive-timm"]).command {
+        match Cli::parse_from(["onedrive-rc", "outbox", "retry", "onedrive-timm"]).command {
             Some(Cmd::Outbox {
                 action: Some(OutboxAction::Retry { remote }),
             }) => assert_eq!(remote.as_deref(), Some("onedrive-timm")),
             other => panic!("unexpected {other:?}"),
         }
-        match Cli::parse_from(["onedrive-tui", "outbox", "discard", "7"]).command {
+        match Cli::parse_from(["onedrive-rc", "outbox", "discard", "7"]).command {
             Some(Cmd::Outbox {
                 action: Some(OutboxAction::Discard { id }),
             }) => assert_eq!(id, 7),
             other => panic!("unexpected {other:?}"),
         }
-        assert!(Cli::try_parse_from(["onedrive-tui", "outbox", "discard"]).is_err());
+        assert!(Cli::try_parse_from(["onedrive-rc", "outbox", "discard"]).is_err());
     }
 
     #[test]
     fn setup_takes_an_optional_reauth_remote() {
         assert!(matches!(
-            Cli::parse_from(["onedrive-tui", "setup"]).command,
+            Cli::parse_from(["onedrive-rc", "setup"]).command,
             Some(Cmd::Setup { reauth: None })
         ));
-        match Cli::parse_from(["onedrive-tui", "setup", "--reauth", "onedrive-timm"]).command {
+        match Cli::parse_from(["onedrive-rc", "setup", "--reauth", "onedrive-timm"]).command {
             Some(Cmd::Setup { reauth }) => assert_eq!(reauth.as_deref(), Some("onedrive-timm")),
             other => panic!("unexpected {other:?}"),
         }
@@ -605,13 +605,13 @@ mod tests {
 
     #[test]
     fn unknown_commands_are_rejected() {
-        assert!(Cli::try_parse_from(["onedrive-tui", "nonsense"]).is_err());
+        assert!(Cli::try_parse_from(["onedrive-rc", "nonsense"]).is_err());
     }
 
     #[test]
     fn error_responses_exit_non_zero() {
-        use onedrive_core::Code;
-        use onedrive_core::ipc::Response;
+        use onedrive_rc_core::Code;
+        use onedrive_rc_core::ipc::Response;
 
         assert_eq!(exit_for(&Response::Ok { msg: "done".into() }), 0);
         assert_eq!(

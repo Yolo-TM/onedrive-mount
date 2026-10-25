@@ -1,4 +1,4 @@
-//! The offline index: what `onedrive-tui ls`/`find` and odfs's offline
+//! The offline index: what `onedrive-rc ls`/`find` and odfs's offline
 //! directory listings read instead of the network.
 //!
 //! Two ways entries get in:
@@ -19,14 +19,14 @@ use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use onedrive_core::config::RemoteConfig;
-use onedrive_core::paths::Paths;
-use onedrive_core::state::{NodeInput, Store};
+use onedrive_rc_core::config::RemoteConfig;
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::state::{NodeInput, Store};
 use serde::Deserialize;
 use tokio::process::Command;
 use tracing::{debug, info};
 
-/// What a crawl did, for the log line and for `onedrive-tui index refresh`.
+/// What a crawl did, for the log line and for `onedrive-rc index refresh`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CrawlStats {
     pub files: u64,
@@ -180,7 +180,7 @@ pub fn record_listing(store: &Store, remote: &str, nodes: &[NodeInput]) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::config::Config;
+    use onedrive_rc_core::config::Config;
 
     fn remote() -> RemoteConfig {
         let config: Config = toml::from_str(

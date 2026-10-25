@@ -1,11 +1,11 @@
-# onedrive-mount → `onedrive` : full overhaul plan
+# onedrive-mount → `onedrive-rc` : full overhaul plan
 
 Status: **approved 2026-10-08.** P0 and P1 are implemented — see §14 and §15.
 P2 is implemented and verified live against the real `onedrive-timm` remote —
 see §17. P3 (offline index, odfs overlay) is implemented and measured — see §18.
 Target version: `0.3.0` (breaking; new config, new binaries, new state format).
 
-Binaries: **`onedrived`** (daemon) and **`onedrive-tui`** (CLI + TUI, one binary).
+Binaries: **`onedrive-rcd`** (daemon) and **`onedrive-rc`** (CLI + TUI, one binary).
 The old `onedrive-mount` (GUI) and `onedrive-mountd` are removed.
 
 ---
@@ -43,7 +43,7 @@ and (d) survives reboots, suspend, lock and network loss without supervision.
 | Question | Decision |
 | --- | --- |
 | Offline browsing | Our own read-mostly FUSE overlay; cached/cloud-only state visible **in the file manager**, not CLI-only |
-| UI | `onedrive-tui` — CLI + ratatui dashboard in one binary. No GUI, no tray. |
+| UI | `onedrive-rc` — CLI + ratatui dashboard in one binary. No GUI, no tray. |
 | Scope | Full rewrite: SQLite state, hash-based `rclone bisync`, D-Bus lifecycle |
 | Conflicts | Both versions always kept; conflict copies live **next to the database in `$HOME`**, and are **also uploaded to OneDrive** |
 | Conflict alerting | Standard Plasma notification that **persists for as long as the conflict exists** (§4.3) |
@@ -51,7 +51,7 @@ and (d) survives reboots, suspend, lock and network loss without supervision.
 | Offline writes | **Queued** in a visible staging folder and replayed on reconnect |
 | Dolphin icon emblems | **Dropped.** `user.xdg.tags` gives a Tags column in Dolphin; no KIO plugin. |
 | Mount point | **`~/OneDrive`** (replaces `~/onedrive-timm`) |
-| Binary names | **`onedrived`** + **`onedrive-tui`** |
+| Binary names | **`onedrive-rcd`** + **`onedrive-rc`** |
 | Stopgap | None — build the replacement, then cut over and delete the old daemon |
 
 ---
@@ -123,10 +123,10 @@ One daemon, one CLI. rclone stays as the transport — it is the right tool — 
 destructive invocation is replaced and every child's output is captured.
 
 ```
-                        ~/.config/onedrive/config.toml
+                        ~/.config/onedrive-rc/config.toml
                                     │ (inotify, validated)
                                     ▼
- ┌─────────────────────────── onedrived ───────────────────────────┐
+ ┌─────────────────────────── onedrive-rcd ───────────────────────────┐
  │  supervisor      capped-backoff restart of every subsystem,     │
  │                  sd_notify READY/WATCHDOG, global per-remote    │
  │                  semaphore, kill_on_drop on every child         │
@@ -159,7 +159,7 @@ destructive invocation is replaced and every child's output is captured.
  │  log             ONE JSONL stream; rclone's --use-json-log       │
  │                  stdout parsed and merged in; daily rotation    │
  │                                                                 │
- │  ipc             unix socket ← onedrive-tui                     │
+ │  ipc             unix socket ← onedrive-rc                     │
  └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -168,16 +168,16 @@ destructive invocation is replaced and every child's output is captured.
 | Path | Contents |
 | --- | --- |
 | `~/OneDrive` | **odfs** — the user-facing mount, always present |
-| `~/.cache/onedrive/<remote>/mount` | backing `rclone mount`, not for direct use |
-| `~/.cache/onedrive/<remote>/vfs` + `vfsMeta` | rclone VFS cache (`--cache-dir`), mirrors remote paths 1:1 — **verified** |
+| `~/.cache/onedrive-rc/<remote>/mount` | backing `rclone mount`, not for direct use |
+| `~/.cache/onedrive-rc/<remote>/vfs` + `vfsMeta` | rclone VFS cache (`--cache-dir`), mirrors remote paths 1:1 — **verified** |
 | `~/onedrive-keepass/` | pinned folder — a **real** directory, always complete offline |
 | `~/onedrive-keepass/Timm.conflict-remote-<ts>.kdbx` | conflict copies, **next to the database** |
 | `~/onedrive-keepass/.versions/<ts>/` | pre-run snapshots, **excluded from sync** (§4.2) |
 | `~/OneDrive.pending/` | offline write staging — visible, inspectable in Dolphin |
-| `~/.local/state/onedrive/state.db` | SQLite (WAL): index, pins, conflicts, outbox, events |
-| `~/.local/state/onedrive/log/onedrived.jsonl` | the single log, daily rotation, 7-day retention |
-| `~/.local/state/onedrive/bisync/<remote>/<pin>/` | bisync `--workdir` listings |
-| `$XDG_RUNTIME_DIR/onedrive/onedrived.sock` | IPC |
+| `~/.local/state/onedrive-rc/state.db` | SQLite (WAL): index, pins, conflicts, outbox, events |
+| `~/.local/state/onedrive-rc/log/onedrive-rcd.jsonl` | the single log, daily rotation, 7-day retention |
+| `~/.local/state/onedrive-rc/bisync/<remote>/<pin>/` | bisync `--workdir` listings |
+| `$XDG_RUNTIME_DIR/onedrive-rc/onedrive-rcd.sock` | IPC |
 
 Existing paths are kept where they already work: `~/onedrive-keepass` does not move, and no new
 top-level directory is added to `$HOME` except the (optional) `~/OneDrive.pending`.
@@ -216,7 +216,7 @@ rclone bisync ~/onedrive-keepass onedrive-timm:Dokumente/Keepass \
   --check-access --check-filename .onedrive-check \   # R3: aborts if a side looks empty
   --max-delete 50 \                      # a PERCENTAGE, not a count — see below
   --resilient --recover --max-lock 2m \  # survives interruption without --resync
-  --workdir ~/.local/state/onedrive/bisync/onedrive-timm/Keepass \
+  --workdir ~/.local/state/onedrive-rc/bisync/onedrive-timm/Keepass \
   --filters-file <generated> \
   --timeout 30s --contimeout 10s --low-level-retries 5 \
   --use-json-log --log-level INFO            # emitted on stderr; see §7
@@ -343,9 +343,9 @@ Persistence is the part you asked for, and it is done properly rather than by sp
   while the conflict row is unresolved, so dismissing it does not make the problem invisible —
   it comes back until it is actually fixed
 - `CloseNotification` fires only when the conflict is genuinely resolved
-- *Open folder* runs `xdg-open ~/onedrive-keepass`; *Details* opens `onedrive-tui conflicts`;
+- *Open folder* runs `xdg-open ~/onedrive-keepass`; *Details* opens `onedrive-rc conflicts`;
   *Resolved* marks it resolved after re-verifying only one version remains
-- `onedrive-tui status` exits non-zero while any conflict is open, so it can also drive a shell
+- `onedrive-rc status` exits non-zero while any conflict is open, so it can also drive a shell
   prompt indicator
 
 The same persistent treatment applies to: mount down > 2 min, pin not synced > 3 × interval,
@@ -404,13 +404,13 @@ Queueing is the riskiest feature requested, so it gets the same contract.
 4. Structural operations offline (`unlink`, `rename`, `mkdir`, `rmdir`) are **not** queued —
    they return `EROFS` with a notification. Replaying structural ops against a tree that moved
    underneath you is exactly how mass deletions happen.
-5. The outbox is a visible folder plus `onedrive-tui outbox ls|retry|discard`. Nothing is hidden.
+5. The outbox is a visible folder plus `onedrive-rc outbox ls|retry|discard`. Nothing is hidden.
 
 ---
 
 ## 5. odfs — the offline overlay
 
-A read-mostly FUSE filesystem (crate `fuser`) running as threads inside `onedrived`. It is what
+A read-mostly FUSE filesystem (crate `fuser`) running as threads inside `onedrive-rcd`. It is what
 makes `~/OneDrive` browsable with no network.
 
 | Operation | Online, backing mount healthy | Offline or mount down |
@@ -427,7 +427,7 @@ Three consequences worth calling out:
 - **Browsing warms the index for free.** Every online `readdir` updates SQLite, so the paths you
   actually use are always fresh offline, with no extra API calls.
 - **"Recently used files offline" needs no new machinery.** `--vfs-cache-mode full` already
-  persists contents to `~/.cache/onedrive/<remote>/vfs/<path>`; raising `--vfs-cache-max-age` to
+  persists contents to `~/.cache/onedrive-rc/<remote>/vfs/<path>`; raising `--vfs-cache-max-age` to
   `30d` is what makes them *stay*. odfs just has to be willing to read them when the mount is
   down. Completeness is checked against `vfsMeta/<path>`, with a conservative fallback of
   "cache file size == indexed size" if that format cannot be parsed.
@@ -448,7 +448,7 @@ user.xdg.tags         = onedrive-cached   (mirror of state)
 `user.xdg.tags` is the pragmatic trick: Dolphin surfaces it in the Information panel and as a
 sortable **Tags** column, so cached-vs-cloud is visible in the file browser with no plugin.
 Per-icon emblem overlays would need a separate KIO/Qt plugin — **dropped from scope**, as agreed.
-`onedrive-tui ls` and the TUI show the same state in the terminal.
+`onedrive-rc ls` and the TUI show the same state in the terminal.
 
 **Risk and fallback:** `~/OneDrive` → backing mount is two FUSE hops, which costs latency. The
 read path is a cached-fd passthrough with a worker pool and per-request timeouts, and Phase 3
@@ -482,7 +482,7 @@ Description=OneDrive daemon
 [Service]
 Type=notify
 NotifyAccess=main
-ExecStart=%h/.nix-profile/bin/onedrived
+ExecStart=%h/.nix-profile/bin/onedrive-rcd
 ExecStopPost=-/run/wrappers/bin/fusermount3 -u %h/OneDrive
 Restart=always
 RestartSec=2
@@ -495,7 +495,7 @@ WantedBy=default.target
 ```
 
 `loginctl enable-linger` is currently **`Linger=no`**, which means the daemon dies at logout.
-`onedrive-tui setup` and the Nix module both set it.
+`onedrive-rc setup` and the Nix module both set it.
 
 `PidLock` is replaced by a real `flock` on the state dir plus a `/proc/<pid>/comm` identity
 check, so a recycled PID can no longer wedge startup forever (finding 9).
@@ -504,7 +504,7 @@ check, so a recycled PID can no longer wedge startup forever (finding 9).
 
 ## 7. Logging you can read
 
-One stream. `~/.local/state/onedrive/log/onedrived.jsonl`, daily rotation, 7-day **and** 200 MB
+One stream. `~/.local/state/onedrive-rc/log/onedrive-rcd.jsonl`, daily rotation, 7-day **and** 200 MB
 retention enforced by a pruning task — not a one-shot truncate at startup.
 
 rclone children are spawned with `--use-json-log --log-level <rclone_log_level>` and **no**
@@ -525,53 +525,53 @@ Errors carry a **stable code and a one-line fix hint**, which is the actual answ
 not easily understandable":
 
 ```
-$ onedrive-tui log --since 1h --level warn
+$ onedrive-rc log --since 1h --level warn
 10:40:43  WARN   pin/Keepass   E_OFFLINE       deferred: no network (retry on reconnect)
 10:41:02  ERROR  mount/timm    E_AUTH_EXPIRED  OneDrive token rejected
-                                               fix: onedrive-tui setup --reauth onedrive-timm
+                                               fix: onedrive-rc setup --reauth onedrive-timm
 10:41:02  INFO   mount/timm    remount scheduled in 5s (attempt 1)
 ```
 
 Codes: `E_OFFLINE`, `E_AUTH_EXPIRED`, `E_MOUNT_STALE`, `E_THROTTLED`, `E_CONFLICT`,
 `E_CHECK_ACCESS`, `E_DISK_FULL`, `E_OUTBOX_STALE`, `E_INDEX_STALE`.
-`onedrive-tui doctor` runs the checks proactively and prints the same hints.
+`onedrive-rc doctor` runs the checks proactively and prints the same hints.
 
 ---
 
-## 8. Interface: `onedrive-tui`
+## 8. Interface: `onedrive-rc`
 
 One binary, subcommands for scripting and a dashboard for looking.
 
 ```
-onedrive-tui                        no args ⇒ open the TUI dashboard
-onedrive-tui setup                  guided first run: rclone OAuth → mount point → pins
+onedrive-rc                        no args ⇒ open the TUI dashboard
+onedrive-rc setup                  guided first run: rclone OAuth → mount point → pins
                                     → unit install → enable-linger → first index crawl
-onedrive-tui status [--json]        one screen; exit 0 healthy / 1 degraded / 2 broken
-onedrive-tui pin add <remote-path> [--local <dir>] | rm | ls | sync [<name>]
-onedrive-tui conflicts [ls] | resolve <id> --keep local|remote|both
-onedrive-tui outbox ls | retry | discard <id>
-onedrive-tui ls <path> | find <pattern>    offline, straight from the index
-onedrive-tui index refresh [--full]
-onedrive-tui log [-f] [--since 1h] [--level warn] [--remote X] [--pin X]
-onedrive-tui doctor
-onedrive-tui service install | uninstall | restart ; onedrive-tui mount remount
+onedrive-rc status [--json]        one screen; exit 0 healthy / 1 degraded / 2 broken
+onedrive-rc pin add <remote-path> [--local <dir>] | rm | ls | sync [<name>]
+onedrive-rc conflicts [ls] | resolve <id> --keep local|remote|both
+onedrive-rc outbox ls | retry | discard <id>
+onedrive-rc ls <path> | find <pattern>    offline, straight from the index
+onedrive-rc index refresh [--full]
+onedrive-rc log [-f] [--since 1h] [--level warn] [--remote X] [--pin X]
+onedrive-rc doctor
+onedrive-rc service install | uninstall | restart ; onedrive-rc mount remount
 ```
 
 ```
-$ onedrive-tui status
+$ onedrive-rc status
 net     online
 mount   ~/OneDrive            ● mounted      up 9d 4h
 index   412,330 files         ● fresh        crawled 4m ago
 pin     Keepass               ● in sync      2m ago
 outbox  empty
-log     ~/.local/state/onedrive/log/onedrived.jsonl   12 MB
+log     ~/.local/state/onedrive-rc/log/onedrive-rcd.jsonl   12 MB
 ```
 
 TUI panes (`Tab` to switch, `r` refresh, `Enter` resolve, `q` quit): Overview · Pins · Conflicts ·
 Outbox · Log tail. It reads over the IPC socket; if the daemon is down it falls back to opening
 SQLite read-only, so it can still tell you *that* the daemon is down and when it last ran.
 
-`onedrive-tui setup` ports the one genuinely good piece of the old GUI:
+`onedrive-rc setup` ports the one genuinely good piece of the old GUI:
 `src/bin/gui/rclone_config_wizard.rs` drives rclone's own non-interactive state machine
 (`rclone config create --non-interactive`, then `config update --continue --state … --result …`)
 and auto-answers `config_is_local=true` so rclone hosts the OAuth redirect itself. That logic is
@@ -615,7 +615,7 @@ CREATE TABLE meta    (k TEXT PRIMARY KEY, v TEXT);   -- heartbeat, crawl gen, sc
 `meta.heartbeat` is written every 30 s, so "healthy and idle" is finally distinguishable from
 "wedged" (finding 12).
 
-Config — `~/.config/onedrive/config.toml`, `#[serde(deny_unknown_fields)]`, **validated at
+Config — `~/.config/onedrive-rc/config.toml`, `#[serde(deny_unknown_fields)]`, **validated at
 startup and on reload** (finding 10), with a real duration parser that accepts `1h30m` and `30d`
 (the current `parse_interval_secs` in `defaults.rs:61` rejects both):
 
@@ -632,7 +632,7 @@ mount_point = "~/OneDrive"
 enabled     = true
 
 [remote.mount]
-cache_dir                = "~/.cache/onedrive/onedrive-timm"
+cache_dir                = "~/.cache/onedrive-rc/onedrive-timm"
 vfs_cache_max_age        = "30d"      # was 72h — this is what keeps recent files offline
 vfs_cache_max_size       = "25G"
 vfs_cache_min_free_space = "10G"
@@ -681,7 +681,7 @@ points, and the important one — **a pin's `local_path` must not live inside an
 
 | From | Why |
 | --- | --- |
-| `src/bin/gui/rclone_config_wizard.rs` | the rclone `--non-interactive` / `--continue` state-machine driving is correct; port to `onedrive-tui setup` |
+| `src/bin/gui/rclone_config_wizard.rs` | the rclone `--non-interactive` / `--continue` state-machine driving is correct; port to `onedrive-rc setup` |
 | `src/paths.rs::expand_tilde` | keep, extend with XDG state dir helpers |
 | `src/config.rs::save` tmp-write + `rename` | the atomic-save pattern is right; keep it |
 | `src/bin/daemon/config_watcher.rs` | inotify-on-parent-dir + 200 ms debounce handles atomic renames correctly |
@@ -710,12 +710,12 @@ Phase 6, so there is no window where nothing works.
 
 | # | Phase | Delivers |
 | --- | --- | --- |
-| **P0** | Skeleton | workspace layout, config + full validation, SQLite + migrations, JSONL logging + rotation, IPC socket, `Type=notify` + watchdog, `onedrive-tui status` / `doctor`. No data path yet. |
+| **P0** | Skeleton | workspace layout, config + full validation, SQLite + migrations, JSONL logging + rotation, IPC socket, `Type=notify` + watchdog, `onedrive-rc status` / `doctor`. No data path yet. |
 | **P1** | Mount supervisor | `rclone mount` child with the tuned flag set, rc API, timeout-guarded liveness probe, supervisor-held backoff (fixes findings 1, 2, 5), rclone JSON log ingestion, D-Bus lifecycle (sleep / resume / network / lock). |
-| **P2** | **Pins — the safety milestone** | `rclone bisync` driver, conflict detection + timestamped copies, pre-run snapshots, persistent Plasma notifications, `onedrive-tui pin` / `conflicts`. **Does not land until the §12 safety matrix is green.** KeePass moves here and the old rule is deleted. |
-| **P3** | Index + odfs | `lsjson --hash` crawl, opportunistic readdir updates, FUSE read path, offline listings, VFS-cache serving, xattrs, `onedrive-tui ls` / `find`. Ends with the latency measurement and the overlay go/no-go. |
-| **P4** | Outbox | offline write staging, baseline-verified replay, conflict path on divergence, `onedrive-tui outbox`. |
-| **P5** | Interface | ratatui TUI, `onedrive-tui setup` end-to-end (OAuth → pins → unit → linger → first crawl). |
+| **P2** | **Pins — the safety milestone** | `rclone bisync` driver, conflict detection + timestamped copies, pre-run snapshots, persistent Plasma notifications, `onedrive-rc pin` / `conflicts`. **Does not land until the §12 safety matrix is green.** KeePass moves here and the old rule is deleted. |
+| **P3** | Index + odfs | `lsjson --hash` crawl, opportunistic readdir updates, FUSE read path, offline listings, VFS-cache serving, xattrs, `onedrive-rc ls` / `find`. Ends with the latency measurement and the overlay go/no-go. |
+| **P4** | Outbox | offline write staging, baseline-verified replay, conflict path on divergence, `onedrive-rc outbox`. |
+| **P5** | Interface | ratatui TUI, `onedrive-rc setup` end-to-end (OAuth → pins → unit → linger → first crawl). |
 | **P6** | Cutover | delete `src/bin/gui/` and the old sync engine, Nix module ships the unit + linger, README rewrite, `0.3.0`. |
 
 ---
@@ -748,16 +748,16 @@ existence. Every case asserts the same invariant: *no byte of either version is 
 - **Unit:** duration parser (`1h30m`, `30d`), config validation (incl. pin-inside-mount), index SQL, `vfsMeta` completeness parsing + size fallback, outbox baseline comparison, conflict filename generation, snapshot retention pruning, rclone JSON log → event mapping.
 - **odfs:** mount over a fake backing dir in a tempdir; assert `readdir` works with the backing dir **removed** (the offline case), cached reads work, offline writes land in the outbox, structural ops return `EROFS`, xattrs present and correct.
 - **Notifications:** assert against a stub `org.freedesktop.Notifications` on a private D-Bus — correct urgency and `resident` hint, same id reused on re-assert, `CloseNotification` only on real resolution. Then one manual check that it renders as expected in Plasma.
-- **Lifecycle** (`tests/manual/lifecycle.sh`, run on this laptop): after each of `systemctl suspend` / `nmcli networking off;on` / `kill -9 <rclone>` / `kill -9 <onedrived>` / lock+unlock / full reboot — assert `onedrive-tui status` returns healthy within 60 s, `~/OneDrive` lists, and the KeePass pin is in sync.
+- **Lifecycle** (`tests/manual/lifecycle.sh`, run on this laptop): after each of `systemctl suspend` / `nmcli networking off;on` / `kill -9 <rclone>` / `kill -9 <onedrive-rcd>` / lock+unlock / full reboot — assert `onedrive-rc status` returns healthy within 60 s, `~/OneDrive` lists, and the KeePass pin is in sync.
 - **Offline acceptance:** `nmcli networking off`, then: `ls -R ~/OneDrive | wc -l` matches the index; a previously-read file opens; `~/onedrive-keepass/Timm.kdbx` opens in KeePassXC and saves; an edit outside a pin lands in `~/OneDrive.pending`; `nmcli networking on` → it uploads and the notification clears.
-- **Resource budget**, measured after 24 h uptime: `onedrived` RSS **< 40 MB**, rclone child RSS **< 150 MB** (today: 119.9 MB with a **1 GB peak**), idle CPU ≈ 0 — the design is event-driven, with only a 30 s watchdog, a 5 m pin timer and a 24 h crawl; there is no 15 s loop `stat()`ing a network filesystem. Log dir **< 200 MB** (today: 1.4 GB).
+- **Resource budget**, measured after 24 h uptime: `onedrive-rcd` RSS **< 40 MB**, rclone child RSS **< 150 MB** (today: 119.9 MB with a **1 GB peak**), idle CPU ≈ 0 — the design is event-driven, with only a 30 s watchdog, a 5 m pin timer and a 24 h crawl; there is no 15 s loop `stat()`ing a network filesystem. Log dir **< 200 MB** (today: 1.4 GB).
 - **Acceptance checklist** mapped back to the original complaints: offline browsing ✓, offline recent files ✓, KeePass never loses an entry ✓, persistent conflict alerts ✓, readable logs ✓, one-command setup ✓, survives reboot/sleep/lock/network loss ✓, no GUI ✓.
 
 ---
 
 ## 13. Open items
 
-Decided: mount point is **`~/OneDrive`**; the daemon binary is **`onedrived`**. The existing
+Decided: mount point is **`~/OneDrive`**; the daemon binary is **`onedrive-rcd`**. The existing
 `~/onedrive-timm` mount is retired at cutover (P6) — nothing under it is user data, it is a
 mount point, so there is nothing to migrate.
 
@@ -787,8 +787,8 @@ mount point, so there is nothing to migrate.
 
 ### What P0 delivered
 
-Workspace layout: `crates/core` (`onedrive-core`), `crates/daemon` (`onedrived`),
-`crates/cli` (`onedrive-tui`). The legacy `onedrive-mount` package remains the
+Workspace layout: `crates/core` (`onedrive-rc-core`), `crates/daemon` (`onedrive-rcd`),
+`crates/cli` (`onedrive-rc`). The legacy `onedrive-mount` package remains the
 workspace root and still builds until P6.
 
 | Area | Where | Notes |
@@ -916,7 +916,7 @@ In a sandboxed `HOME`, reusing the existing `rclone.conf` read-only:
   hint, detached, remounted.
 - **edit `rclone_log_level` in the config** → inotify reload, mount restarted
   with the new flag ~14s later, no daemon restart and no command needed.
-- **`onedrive-tui mount remount`** → the exact command the `E_MOUNT_STALE` hint
+- **`onedrive-rc mount remount`** → the exact command the `E_MOUNT_STALE` hint
   prints; remounts and comes back in ~14s.
 - **rclone's log lines appear in our single stream** with `source=rclone` and
   `subject=mount/<remote>`, same format and timestamps as our own lines.
@@ -936,8 +936,8 @@ the machine is too intrusive to do unprompted. To check it:
 
 ```sh
 systemctl suspend          # then resume, and:
-onedrive-tui log --since 10m | grep -E 'suspend|resume'
-onedrive-tui status
+onedrive-rc log --since 10m | grep -E 'suspend|resume'
+onedrive-rc status
 ```
 
 Expect `suspending` before, `resumed from suspend` after, and the mount healthy
@@ -1082,13 +1082,13 @@ checked it against the real remote rather than only the stand-in.
   (`pinwatch.rs`) so a save reaches OneDrive in seconds rather than at the next
   tick, and sync triggers on screen-lock, suspend, resume and reconnect.
   `mountloop.rs` owns the `Supervisor` task and wires `Control::SyncPins` /
-  `Control::ReloadPins` so `onedrive-tui pin sync` and a config reload reach it.
+  `Control::ReloadPins` so `onedrive-rc pin sync` and a config reload reach it.
 - **Persistent conflict notifications.** `notify.rs` sends a `critical` +
   `resident` D-Bus notification, keyed so a repeat detection replaces rather
   than stacks, and re-asserted every 30 minutes while the row stays open
   (`notify::REASSERT_INTERVAL`) — dismissing it does not make the problem
   invisible.
-- **`onedrive-tui conflicts [ls] | resolve <id> --keep local|remote|both`** —
+- **`onedrive-rc conflicts [ls] | resolve <id> --keep local|remote|both`** —
   the piece the plan's interface section (§8) specified but P2 had not yet
   built. `crates/daemon/src/resolve.rs` finds every copy of a conflicted file by
   parsing the side and timestamp back out of its name (conflicts can
@@ -1106,7 +1106,7 @@ checked it against the real remote rather than only the stand-in.
   newtype variant's content merged with the tag object; a JSON array has
   nowhere to put that tag. `Response::Status` only ever looked safe because
   `StatusReport` happens to be a struct. This broke the *first* live
-  `onedrive-tui conflicts` call during verification (§ below) and is now a
+  `onedrive-rc conflicts` call during verification (§ below) and is now a
   regression test (`ipc::tests::a_conflict_list_round_trips_empty_and_populated`).
 
 ### Live verification against the real remote
@@ -1116,14 +1116,14 @@ pin (`_onedrive-p2-test`, not the real KeePass folder) in a sandboxed `$HOME`:
 
 1. Daemon started, mounted `~/OneDrive`, pulled the seeded remote file into the
    pin on the first bisync cycle.
-2. Local and remote edited independently (no shared clock); `onedrive-tui pin
+2. Local and remote edited independently (no shared clock); `onedrive-rc pin
    sync` triggered a cycle. rclone's own log showed it correctly picking the
    newer side, renaming the loser, and our reconciliation pass logging `kept
    both versions of a conflicting file`; the renamed, timestamped,
    extension-preserving copy then propagated to the remote on the next cycle,
    and the orphaned raw-named copy on the remote was cleaned up — all exactly
    as §4.1 describes.
-3. `onedrive-tui conflicts` listed the conflict with both versions and the
+3. `onedrive-rc conflicts` listed the conflict with both versions and the
    exact command to resolve it — this is what surfaced the serialization bug
    above, fixed, rebuilt, and reproduced clean.
 4. A manual `busctl` `Notify` call with the same hint set confirmed the
@@ -1131,10 +1131,10 @@ pin (`_onedrive-p2-test`, not the real KeePass folder) in a sandboxed `$HOME`:
    `plasmashell` at the same timestamp was confirmed unrelated by reproducing
    it with a bare `Notify` carrying none of our hints — cosmetic noise in this
    Plasma version, not a defect in `notify.rs`.
-5. `onedrive-tui conflicts resolve <id> --keep remote` removed the local loser
+5. `onedrive-rc conflicts resolve <id> --keep remote` removed the local loser
    copy, left the discarded content recoverable under
    `.versions/<ts>-resolve/`, and queued a pin sync — rclone then deleted the
-   corresponding file on the remote, and `onedrive-tui conflicts` returned to
+   corresponding file on the remote, and `onedrive-rc conflicts` returned to
    "no conflicts" once the sweep observed it.
 
 No step required touching code not covered by the §16 matrix; the matrix's
@@ -1149,7 +1149,7 @@ browsable, and recently-used files stay readable, with no network at all.
 
 ### What P3 adds
 
-- **The offline index** (`crates/daemon/src/index.rs`, `onedrive_core::state`'s
+- **The offline index** (`crates/daemon/src/index.rs`, `onedrive_rc_core::state`'s
   `node` table). A full crawl is one `rclone lsjson --hash -R` per remote,
   generation-stamped so that a deletion upstream — the one event a listing
   can't report directly — is detected by *absence*: anything not seen by the
@@ -1190,11 +1190,11 @@ browsable, and recently-used files stay readable, with no network at all.
   entire feature. `[remote.overlay] enabled = false` reverts a remote to the
   pre-P3 behaviour, which is also the fallback this section's measurement is
   for.
-- **The index is reachable without a live daemon.** `onedrive-tui ls <path>` /
+- **The index is reachable without a live daemon.** `onedrive-rc ls <path>` /
   `find <pattern>` (`crates/cli/src/index_cmd.rs`) open the state database
   read-only, the same pattern `client::status_from_database` already
   established — there is no IPC round trip to answer them, because the entire
-  point is that listing the index needs nothing running. `onedrive-tui index
+  point is that listing the index needs nothing running. `onedrive-rc index
   refresh` now actually crawls, and a periodic check (every 10 minutes,
   comparing against each remote's `full_crawl_interval`) crawls on its own.
 
@@ -1205,7 +1205,7 @@ hops where a bare rclone mount is one, and said the measurement would decide
 whether `[remote.overlay] enabled = false` should be the recommended default
 rather than just an escape hatch.
 
-Measured on this machine: a real `onedrived` (release build) managing a real
+Measured on this machine: a real `onedrive-rcd` (release build) managing a real
 odfs mount in front of a real backing `rclone mount`, both pointed at an
 `alias` remote (local disk, no credentials needed — the same stand-in trick
 §16's matrix uses) over a synthetic tree of 2,000 files across 50 directories,
@@ -1244,7 +1244,7 @@ remote still matches what the edit started from.
 
 ### What P4 adds
 
-- **The outbox table** (`onedrive_core::state::OutboxRecord`, `crates/core/src/state.rs`):
+- **The outbox table** (`onedrive_rc_core::state::OutboxRecord`, `crates/core/src/state.rs`):
   one row per staged write — `remote`, `path`, `staged_path`, and a baseline
   (`base_size`/`base_quickxor`/`base_mtime`) recording what the remote looked
   like when the edit started. `queue_outbox` is idempotent per `(remote,
@@ -1297,11 +1297,11 @@ remote still matches what the edit started from.
   happen, so those stay refused rather than queued.
 - **Replay runs on reconnect** (`crates/daemon/src/mountloop.rs`): the
   `Event::NetworkOnline` handler calls `replay_outbox_all` for every enabled
-  remote, right after the existing pin sync. `onedrive-tui outbox retry
+  remote, right after the existing pin sync. `onedrive-rc outbox retry
   [<remote>]` drives the same function on demand through a new
   `Control::OutboxRetry` message, handled by the same supervisor task — the
   identical pattern `Control::SyncPins`/`Control::IndexRefresh` already use.
-- **The CLI** (`crates/cli/src/main.rs`, `render.rs`): `onedrive-tui outbox`
+- **The CLI** (`crates/cli/src/main.rs`, `render.rs`): `onedrive-rc outbox`
   (bare, or `ls`) lists every queued write with a non-zero exit while
   anything is queued — the same "non-destructive default, exit code drives a
   prompt" convention `conflicts` established. `outbox retry [<remote>]` asks
@@ -1315,7 +1315,7 @@ remote still matches what the edit started from.
 
 `outbox::replay`/`replay_one` take `app: &Arc<App>`, not `store: &Store`
 directly, and this is not a style choice. `rusqlite::Connection` — and so
-`onedrive_core::state::Store` — is `Send` but not `Sync` (documented on
+`onedrive_rc_core::state::Store` — is `Send` but not `Sync` (documented on
 `App`'s own `store` field). `replay` is async and awaits twice per row (the
 remote check, the upload); any reference alive across either await becomes
 part of the generated future's captured state, and `mountloop::run` is itself
@@ -1332,7 +1332,7 @@ does, rather than a bare in-memory `Store`, for the same reason.
 
 ### Verification
 
-- **Unit, `onedrive_core::state`**: 6 tests for the outbox table — idempotent
+- **Unit, `onedrive_rc_core::state`**: 6 tests for the outbox table — idempotent
   queueing, restaging preserves the original baseline, failure recording,
   hard-delete on resolution, oldest-first ordering across remotes.
 - **Unit, `outbox.rs`** (7 tests, against the same `alias`-remote stand-in
@@ -1370,14 +1370,14 @@ does, rather than a bare in-memory `Store`, for the same reason.
   failed row's error surfaces rather than being hidden.
 - **Full workspace**: `cargo build --workspace`, `cargo test --workspace`
   (482 tests across every lib, integration suite, and doctest in
-  `onedrive-core`, `onedrived`, and `onedrive-tui` — including the 15-case
+  `onedrive-rc-core`, `onedrive-rcd`, and `onedrive-rc` — including the 15-case
   safety matrix — all green), `cargo clippy --workspace --all-targets`
   clean, `cargo fmt --all` clean.
 
 ## 20. P5 complete: the dashboard and guided setup
 
-P5 is §8's interface: a `ratatui` dashboard for `onedrive-tui` with no
-arguments, and `onedrive-tui setup` as the one command that finishes the job
+P5 is §8's interface: a `ratatui` dashboard for `onedrive-rc` with no
+arguments, and `onedrive-rc setup` as the one command that finishes the job
 — OAuth → mount point → pins → config written → service installed → linger
 enabled → first crawl queued — replacing the old GUI's four disconnected
 steps spread across three screen regions.
@@ -1388,7 +1388,7 @@ steps spread across three screen regions.
   Conflicts, Outbox, Log — `Tab`/`Shift+Tab` to switch, `↑`/`↓`/`j`/`k` to
   select, `r` to refresh now, `Enter` to act, `q`/`Esc`/`Ctrl-C` to quit.
   Overview reuses `render::status` verbatim, so the dashboard can never
-  disagree with `onedrive-tui status` about what "healthy" means — there is
+  disagree with `onedrive-rc status` about what "healthy" means — there is
   only one function that decides that, called from both places. Pins,
   Conflicts, and Outbox are `List` widgets built from the same single-line
   renderers (`render::pin_line`/`conflict_line`/`outbox_line`, new in this
@@ -1423,7 +1423,7 @@ steps spread across three screen regions.
   immediately after both a normal `q` quit and a `Ctrl-C` quit (a command
   typed right after exits 0 and echoes correctly, rather than the terminal
   needing a manual `reset`).
-- **`onedrive-tui setup`** (`crates/cli/src/setup.rs`) and **the rclone
+- **`onedrive-rc setup`** (`crates/cli/src/setup.rs`) and **the rclone
   wizard** (`crates/cli/src/rclone_wizard.rs`, ported from the old GUI's
   `src/bin/gui/rclone_config_wizard.rs`, which got the
   `config create/update --non-interactive` + `--continue --state --result`
@@ -1448,13 +1448,13 @@ steps spread across three screen regions.
   default — and the user answers it themselves, exactly as rclone's own
   interactive prompt would ask. `setup` composes the collected remote name,
   mount point, and any pins into a config via `toml::from_str` into
-  `onedrive_core::config::Config` (reusing the exact deserialization path a
+  `onedrive_rc_core::config::Config` (reusing the exact deserialization path a
   hand-written `config.toml` goes through, including every `#[serde(default
   = …)]`), then `Config::validate` and `Config::save` before installing the
   service and queuing the first crawl. `setup --reauth <remote>` runs just
   the OAuth half via `rclone config update --non-interactive --all`,
   against an existing remote — this is what `Code::AuthExpired`'s hint
-  (`onedrive-tui setup --reauth <remote>`), already baked into `code.rs`
+  (`onedrive-rc setup --reauth <remote>`), already baked into `code.rs`
   from an earlier phase, actually points at.
 
 ### Verification
@@ -1481,14 +1481,14 @@ steps spread across three screen regions.
   raw mode or the alternate screen.
 - **Full workspace**: `cargo build --workspace`, `cargo test --workspace`
   (496 tests, all green — the one transient failure seen in an
-  `onedrived` safety-matrix test tied to a real `kill -9` and subprocess
+  `onedrive-rcd` safety-matrix test tied to a real `kill -9` and subprocess
   timing did not reproduce on a clean re-run, and is unrelated to anything
   this phase touched), `cargo clippy --workspace --all-targets` clean,
   `cargo fmt --all` clean.
 
 ### Known gap
 
-`onedrive-tui setup`'s pin-adding loop and the OAuth wizard's prompts are
+`onedrive-rc setup`'s pin-adding loop and the OAuth wizard's prompts are
 genuinely interactive — they read from stdin in a loop, which is correct for
 what they are but means (unlike every other command in this project) they
 have no automated end-to-end test driving the whole `setup` flow start to
@@ -1501,7 +1501,7 @@ out of reach for an automated test and was not attempted.
 ## 21. P6 complete: cutover
 
 `0.3.0`. The old GUI, its daemon, and the sync engine that caused §2's data
-loss are deleted, not kept around as a fallback — `onedrived` + `onedrive-tui`
+loss are deleted, not kept around as a fallback — `onedrive-rcd` + `onedrive-rc`
 are now the only thing in this repository.
 
 ### What P6 removed
@@ -1528,7 +1528,7 @@ are now the only thing in this repository.
   …/`libgl1-mesa-dev` apt packages and the separate "Clippy (legacy GUI +
   daemon)"/"Test (legacy GUI + daemon)" steps. **`release.yml`** is a full
   rewrite: it built `onedrive-mount`/`onedrive-mountd` for nix/glibc/musl
-  before; it now builds `onedrived`/`onedrive-tui` the same three ways, with
+  before; it now builds `onedrive-rcd`/`onedrive-rc` the same three ways, with
   the X11 runtime-dep installation step gone from `build-glibc` and
   `build-musl` able to statically link *both* binaries now, not just the
   daemon (neither needs libfuse or a GUI toolkit to begin with).
@@ -1541,7 +1541,7 @@ are now the only thing in this repository.
 
 ### A discovery made while verifying this, not caused by it
 
-Running `nix build .#onedrive` as part of verifying the cutover — the first
+Running `nix build .#onedrive-rc` as part of verifying the cutover — the first
 time this session a build depended on **git's view of the tree** rather than
 the raw filesystem — surfaced that most of the source written since P1
 (`crates/daemon/src/lib.rs` itself, `odfs.rs`, `index.rs`, `pins.rs`,
@@ -1551,7 +1551,7 @@ the raw filesystem — surfaced that most of the source written since P1
 been `git add`ed across any prior session — plain `cargo build`/`cargo test`
 never cared, since they read the real filesystem, but Nix flakes restrict a
 local dirty repository's source to git-tracked content, so the sandbox build
-failed with `can't find lib onedrived at path .../src/lib.rs` despite the
+failed with `can't find lib onedrive-rcd at path .../src/lib.rs` despite the
 file plainly existing. Fixed with `git add -A` (staged, not committed — nothing
 in this project is committed without being asked). Worth recording because it
 is exactly the kind of gap that stays invisible until something other than
@@ -1560,15 +1560,15 @@ is exactly the kind of gap that stays invisible until something other than
 ### The Nix sandbox cannot mount FUSE
 
 The same `nix build` run surfaced the only other new finding: 11 of
-`onedrived`'s tests — `odfs`'s real-mount tests and `mount`'s
+`onedrive-rcd`'s tests — `odfs`'s real-mount tests and `mount`'s
 reconcile/remount tests, the ones that call `fuser::spawn_mount` against a
 real `/dev/fuse` — fail inside Nix's build sandbox with "No such file or
 directory," because the sandbox has neither the device node nor the
 privilege to create one. This is a packaging constraint, not a code bug: the
 same 11 pass under plain `cargo test --workspace` (confirmed — they are
-exactly 11 of the 226 `onedrived` tests, 215 others unaffected) and under
+exactly 11 of the 226 `onedrive-rcd` tests, 215 others unaffected) and under
 CI's non-Nix `check` job, both of which run on a real kernel with a real
-`/dev/fuse`. `flake.nix`'s `onedrive` derivation now lists exactly those 11
+`/dev/fuse`. `flake.nix`'s `onedrive-rc` derivation now lists exactly those 11
 test names under `checkFlags = [ "--skip=..." ... ]` — by exact name rather
 than by module prefix, so `nix build`'s check phase keeps every pure-logic
 `odfs`/`mount` test (inode table, pin-path resolution, xattr synthesis, the
@@ -1578,24 +1578,24 @@ no sandbox can give them.
 ### Verification
 
 - `nix flake check --no-build`: evaluates cleanly, including the NixOS module.
-- `nix build .#onedrive`: builds both binaries and runs the workspace test
+- `nix build .#onedrive-rc`: builds both binaries and runs the workspace test
   suite inside the sandbox (minus the 11 FUSE tests above) — this is the
   first time in the project this specific path (a clean Nix build from the
   flake, not `cargo` directly) was actually exercised, and it is now part of
   CI's `nix` job, unchanged from before this phase.
-- `onedrived --version`, `onedrive-tui --version`, both run from the Nix
+- `onedrive-rcd --version`, `onedrive-rc --version`, both run from the Nix
   build output directly.
 - The CI smoke-test script (`.github/workflows/ci.yml`, untouched by this
   phase beyond removing the legacy steps) replayed locally end to end: version
   flags, `--print-unit` contains `Type=notify`, `--check-config` correctly
   fails with no config and succeeds once `config.example.toml` is in place,
-  the daemon starts and answers `onedrive-tui status --json` with
+  the daemon starts and answers `onedrive-rc status --json` with
   `"source": "daemon"`, `doctor` exits 1 on the expected CI-box warnings
   (no rclone remote actually authenticated, no systemd unit installed, no
   linger), a second daemon instance is correctly refused, and `SIGTERM`
   stops it cleanly.
 - **Full workspace**: `cargo build --workspace`, `cargo test --workspace`
-  (448 tests across `onedrive-core`, `onedrived`, and `onedrive-tui`,
+  (448 tests across `onedrive-rc-core`, `onedrive-rcd`, and `onedrive-rc`,
   including the 15-case safety matrix — all green; down from 496 only
   because the deleted legacy package's own tests are gone with it),
   `cargo clippy --workspace --all-targets` clean, `cargo fmt --all` clean.
@@ -1641,7 +1641,7 @@ practice. Fixed in both directions:
 ### A second CI failure, from the fix for the first
 
 Fixing the above and pushing again surfaced a different failure in the same
-job: the "Smoke test the binaries" step's second `onedrived --check-config`
+job: the "Smoke test the binaries" step's second `onedrive-rcd --check-config`
 call reported `no config file` immediately after the step had just written
 one, exit code 4 (`exit::BAD_CONFIG`). Reproduced locally in one line rather
 than guessed at: setting `XDG_CONFIG_HOME` to an arbitrary directory before
@@ -1661,7 +1661,7 @@ specific bug is unlikely to reach it, but nothing guarantees that forever).
 
 ### A third CI failure, from the fix for the second
 
-Fixing that and pushing again got further — `onedrived --check-config`
+Fixing that and pushing again got further — `onedrive-rcd --check-config`
 correctly found the just-written config this time — but the same step then
 died silently right after printing a perfectly valid `status --json` blob,
 exit code 2, nothing from `log` or `doctor` at all. Reproduced locally by
@@ -1670,7 +1670,7 @@ giving the mount supervisor a few seconds to settle before calling `status`
 pipeline
 
 ```sh
-"$BIN/onedrive-tui" status --json | tee /dev/stderr | grep -q '"source": "daemon"'
+"$BIN/onedrive-rc" status --json | tee /dev/stderr | grep -q '"source": "daemon"'
 ```
 
 fails outright, identically. The cause: `status --json`'s own exit code *is*

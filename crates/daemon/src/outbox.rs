@@ -14,9 +14,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use onedrive_core::config::RemoteConfig;
-use onedrive_core::paths::{Paths, join_guarded};
-use onedrive_core::state::{NodeRecord, OutboxRecord, Store};
+use onedrive_rc_core::config::RemoteConfig;
+use onedrive_rc_core::paths::{Paths, join_guarded};
+use onedrive_rc_core::state::{NodeRecord, OutboxRecord, Store};
 use serde::Deserialize;
 use tokio::process::Command;
 use tracing::{info, warn};
@@ -318,7 +318,7 @@ async fn replay_one(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::config::Config;
+    use onedrive_rc_core::config::Config;
 
     fn config(root: &std::path::Path) -> Config {
         toml::from_str(&format!(

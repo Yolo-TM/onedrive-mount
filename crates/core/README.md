@@ -1,7 +1,7 @@
-# onedrive-core
+# onedrive-rc-core
 
-Shared library behind [`onedrived`](../daemon/README.md) and
-[`onedrive-tui`](../cli/README.md) — not a binary, not used directly. One
+Shared library behind [`onedrive-rcd`](../daemon/README.md) and
+[`onedrive-rc`](../cli/README.md) — not a binary, not used directly. One
 crate so the two never disagree about the wire format or what a valid config
 looks like.
 
@@ -17,5 +17,5 @@ looks like.
 | `unit` | the systemd user unit template |
 
 ```sh
-cargo test -p onedrive-core
+cargo test -p onedrive-rc-core
 ```

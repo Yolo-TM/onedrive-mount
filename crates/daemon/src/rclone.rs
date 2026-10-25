@@ -20,9 +20,9 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use anyhow::{Context, Result};
-use onedrive_core::Code;
-use onedrive_core::config::{RcloneLogLevel, RemoteConfig};
-use onedrive_core::paths::Paths;
+use onedrive_rc_core::Code;
+use onedrive_rc_core::config::{RcloneLogLevel, RemoteConfig};
+use onedrive_rc_core::paths::Paths;
 use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
@@ -424,7 +424,7 @@ pub async fn fusermount_unmount(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::config::Config;
+    use onedrive_rc_core::config::Config;
 
     fn remote() -> RemoteConfig {
         let config: Config = toml::from_str(
@@ -457,7 +457,7 @@ mod tests {
         assert_eq!(args[1], "onedrive-timm:");
         // The overlay is on by default, so rclone goes to the hidden backing
         // path; odfs is what appears at the path the user actually browses.
-        assert_eq!(args[2], "/home/t/.cache/onedrive/onedrive-timm/mount");
+        assert_eq!(args[2], "/home/t/.cache/onedrive-rc/onedrive-timm/mount");
 
         let joined = args.join(" ");
         for expected in [
@@ -501,13 +501,13 @@ mod tests {
         let args = mount_args(&remote(), &paths(), &mount_point(), RcloneLogLevel::Notice);
         let joined = args.join(" ");
         assert!(
-            joined.contains("--rc-addr=unix:///home/t/.run/onedrive/rc-onedrive-timm.sock"),
+            joined.contains("--rc-addr=unix:///home/t/.run/onedrive-rc/rc-onedrive-timm.sock"),
             "{joined}"
         );
         assert!(!joined.contains("--rc-addr=:"), "no TCP port: {joined}");
         assert_eq!(
             rc_socket(&paths(), "onedrive-timm"),
-            Path::new("/home/t/.run/onedrive/rc-onedrive-timm.sock"),
+            Path::new("/home/t/.run/onedrive-rc/rc-onedrive-timm.sock"),
             "the rc socket shares the length-guarded socket directory"
         );
     }
@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn parses_a_real_rclone_json_line() {
-        let line = r#"{"time":"2026-10-08T12:43:32.7911113+02:00","level":"info","msg":"poll-interval is not supported by this remote","object":"OneDrive root ''","objectType":"*onedrive.Fs","source":"vfs/vfs.go:257"}"#;
+        let line = r#"{"time":"2026-10-08T12:43:32.7911113+02:00","level":"info","msg":"poll-interval is not supported by this remote","object":"OneDrive root ''","objectType":"*onedrive-rc.Fs","source":"vfs/vfs.go:257"}"#;
         let entry: RcloneLine = serde_json::from_str(line).unwrap();
         assert_eq!(entry.level, "info");
         assert_eq!(entry.msg, "poll-interval is not supported by this remote");

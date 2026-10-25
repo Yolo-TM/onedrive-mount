@@ -1,4 +1,4 @@
-//! `onedrived` internals.
+//! `onedrive-rcd` internals.
 //!
 //! Exposed as a library as well as a binary so the sync-safety matrix can drive
 //! the *real* bisync, reconciliation and snapshot code rather than a

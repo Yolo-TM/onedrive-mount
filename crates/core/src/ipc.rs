@@ -389,7 +389,7 @@ impl StatusReport {
             degrade(
                 Health::Degraded,
                 format!(
-                    "{} unresolved conflict{} — see: onedrive-tui conflicts",
+                    "{} unresolved conflict{} — see: onedrive-rc conflicts",
                     self.conflicts,
                     if self.conflicts == 1 { "" } else { "s" }
                 ),
@@ -474,9 +474,9 @@ pub enum ClientError {
 impl std::fmt::Display for ClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NotRunning(_) => f.write_str("onedrived is not running"),
-            Self::Io(e) => write!(f, "talking to onedrived: {e}"),
-            Self::Protocol(m) => write!(f, "unexpected reply from onedrived: {m}"),
+            Self::NotRunning(_) => f.write_str("onedrive-rcd is not running"),
+            Self::Io(e) => write!(f, "talking to onedrive-rcd: {e}"),
+            Self::Protocol(m) => write!(f, "unexpected reply from onedrive-rcd: {m}"),
         }
     }
 }
@@ -498,7 +498,7 @@ fn classify(e: std::io::Error) -> ClientError {
     }
 }
 
-/// Synchronous client, used by `onedrive-tui`. Blocking on purpose: the CLI has
+/// Synchronous client, used by `onedrive-rc`. Blocking on purpose: the CLI has
 /// one thing to ask and no reason to pull in an async runtime.
 pub fn request(socket: &Path, req: &Request, timeout: Duration) -> Result<Response, ClientError> {
     let mut stream = UnixStream::connect(socket).map_err(classify)?;
@@ -578,7 +578,7 @@ mod tests {
             conflicts: 0,
             outbox: OutboxStatus::default(),
             log: LogStatus {
-                dir: "/home/t/.local/state/onedrive/log".into(),
+                dir: "/home/t/.local/state/onedrive-rc/log".into(),
                 bytes: 12 << 20,
             },
         }
@@ -795,7 +795,7 @@ mod tests {
         match resp {
             Response::Err { code, hint, .. } => {
                 assert_eq!(code, Code::AuthExpired);
-                assert_eq!(hint.unwrap(), "onedrive-tui setup --reauth onedrive-timm");
+                assert_eq!(hint.unwrap(), "onedrive-rc setup --reauth onedrive-timm");
             }
             other => panic!("unexpected {other:?}"),
         }
@@ -810,13 +810,13 @@ mod tests {
     #[test]
     fn a_missing_socket_reports_not_running_rather_than_an_io_error() {
         let err = request(
-            Path::new("/nonexistent/onedrived.sock"),
+            Path::new("/nonexistent/onedrive-rcd.sock"),
             &Request::Ping,
             Duration::from_millis(100),
         )
         .unwrap_err();
         assert!(matches!(err, ClientError::NotRunning(_)), "{err:?}");
-        assert_eq!(err.to_string(), "onedrived is not running");
+        assert_eq!(err.to_string(), "onedrive-rcd is not running");
     }
 
     #[test]
@@ -870,7 +870,7 @@ mod tests {
 
         let err = request(&socket, &Request::Ping, Duration::from_secs(2)).unwrap_err();
         assert!(matches!(err, ClientError::NotRunning(_)), "{err:?}");
-        assert_eq!(err.to_string(), "onedrived is not running");
+        assert_eq!(err.to_string(), "onedrive-rcd is not running");
         server.join().unwrap();
     }
 

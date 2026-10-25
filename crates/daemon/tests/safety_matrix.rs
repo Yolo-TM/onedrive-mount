@@ -20,10 +20,10 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use chrono::{TimeZone, Utc};
-use onedrive_core::config::{Config, PinConfig};
-use onedrive_core::paths::Paths;
-use onedrived::bisync::{self, Outcome, SENTINEL, VERSIONS_DIR};
-use onedrived::{reconcile, snapshot};
+use onedrive_rc_core::config::{Config, PinConfig};
+use onedrive_rc_core::paths::Paths;
+use onedrive_rcd::bisync::{self, Outcome, SENTINEL, VERSIONS_DIR};
+use onedrive_rcd::{reconcile, snapshot};
 
 /// Name of the stand-in remote defined in each fixture's own rclone config.
 const REMOTE_NAME: &str = "stand-in";
@@ -106,7 +106,7 @@ impl Fixture {
             &self.pin,
             self.remote_name(),
             &self.paths,
-            onedrive_core::config::RcloneLogLevel::Notice,
+            onedrive_rc_core::config::RcloneLogLevel::Notice,
         )
         .await
         .expect("bisync should not error out of band")
@@ -407,7 +407,7 @@ async fn an_empty_looking_remote_is_refused_with_no_deletions() {
     let (outcome, _) = f.cycle().await;
     match outcome {
         Outcome::Refused { code, msg } => {
-            assert_eq!(code, onedrive_core::Code::CheckAccess);
+            assert_eq!(code, onedrive_rc_core::Code::CheckAccess);
             assert!(msg.contains("Nothing was changed"), "{msg}");
         }
         other => panic!("expected a refusal, got {other:?}"),
@@ -438,7 +438,7 @@ async fn a_mass_deletion_is_refused() {
     let (outcome, _) = f.cycle().await;
     match outcome {
         Outcome::Refused { code, msg } => {
-            assert_eq!(code, onedrive_core::Code::CheckAccess);
+            assert_eq!(code, onedrive_rc_core::Code::CheckAccess);
             assert!(msg.contains("max_delete_percent"), "{msg}");
         }
         other => panic!("expected a refusal, got {other:?}"),

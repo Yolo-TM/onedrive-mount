@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use onedrive_core::paths::Paths;
-use onedrive_core::unit::{self, UNIT_NAME};
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::unit::{self, UNIT_NAME};
 
-/// `~/.config/systemd/user/onedrived.service`
+/// `~/.config/systemd/user/onedrive-rcd.service`
 ///
 /// Derived from the same home as everything else so a test `Paths` stays
 /// self-contained rather than writing into the real user's systemd directory.
@@ -27,21 +27,21 @@ pub fn unit_path(paths: &Paths) -> PathBuf {
 pub fn daemon_binary() -> Result<PathBuf> {
     let exe = std::env::current_exe().context("finding our own path")?;
     if let Some(dir) = exe.parent() {
-        let sibling = dir.join("onedrived");
+        let sibling = dir.join("onedrive-rcd");
         if sibling.is_file() {
             return sibling.canonicalize().context("resolving the daemon path");
         }
     }
 
     if let Some(found) = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .map(|d| d.join("onedrived"))
+        .map(|d| d.join("onedrive-rcd"))
         .find(|p| p.is_file())
     {
         return found.canonicalize().context("resolving the daemon path");
     }
 
     bail!(
-        "cannot find the `onedrived` binary next to {} or on PATH",
+        "cannot find the `onedrive-rcd` binary next to {} or on PATH",
         exe.display()
     )
 }
@@ -105,7 +105,7 @@ pub fn uninstall(paths: &Paths) -> Result<String> {
 
 pub fn restart(paths: &Paths) -> Result<String> {
     if !unit_path(paths).exists() {
-        bail!("{UNIT_NAME} is not installed\ninstall it with: onedrive-tui service install");
+        bail!("{UNIT_NAME} is not installed\ninstall it with: onedrive-rc service install");
     }
     systemctl(&["restart", UNIT_NAME])?;
     Ok(format!("restarted {UNIT_NAME}\n"))
@@ -182,7 +182,7 @@ mod tests {
         let paths = Paths::rooted("/home/t");
         assert_eq!(
             unit_path(&paths),
-            Path::new("/home/t/.config/systemd/user/onedrived.service")
+            Path::new("/home/t/.config/systemd/user/onedrive-rcd.service")
         );
     }
 
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn writes_atomically_and_leaves_no_temp_file() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("onedrived.service");
+        let path = dir.path().join("onedrive-rcd.service");
 
         write_atomic(&path, "[Unit]\n").unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "[Unit]\n");
@@ -222,8 +222,8 @@ mod tests {
     /// watchdog/restart settings the plan calls for.
     #[test]
     fn the_rendered_unit_points_at_the_daemon_and_is_supervised() {
-        let rendered = unit::render(Path::new("/opt/bin/onedrived"));
-        assert!(rendered.contains("ExecStart=/opt/bin/onedrived"));
+        let rendered = unit::render(Path::new("/opt/bin/onedrive-rcd"));
+        assert!(rendered.contains("ExecStart=/opt/bin/onedrive-rcd"));
         assert!(rendered.contains("Type=notify"));
         assert!(rendered.contains("WatchdogSec=60"));
         assert!(rendered.contains("Restart=always"));
@@ -235,7 +235,7 @@ mod tests {
             Ok(path) => assert!(path.is_file(), "{}", path.display()),
             Err(e) => {
                 let msg = format!("{e:#}");
-                assert!(msg.contains("onedrived"), "{msg}");
+                assert!(msg.contains("onedrive-rcd"), "{msg}");
                 assert!(msg.contains("PATH"), "{msg}");
             }
         }

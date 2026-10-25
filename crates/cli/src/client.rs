@@ -12,14 +12,14 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use onedrive_core::config::Config;
-use onedrive_core::ipc::{
+use onedrive_rc_core::config::Config;
+use onedrive_rc_core::ipc::{
     self, ClientError, IndexStatus, LogStatus, MountState, NetworkState, OutboxStatus, PinStatus,
     RemoteStatus, ReportSource, Request, Response, StatusReport,
 };
-use onedrive_core::paths::Paths;
-use onedrive_core::state::Store;
-use onedrive_core::{VERSION, log as corelog};
+use onedrive_rc_core::paths::Paths;
+use onedrive_rc_core::state::Store;
+use onedrive_rc_core::{VERSION, log as corelog};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -36,7 +36,7 @@ pub fn try_request(paths: &Paths, req: &Request) -> Result<Option<Response>> {
 pub fn request(paths: &Paths, req: &Request) -> Result<Response> {
     try_request(paths, req)?.with_context(|| {
         format!(
-            "onedrived is not running (no socket at {})\nstart it with: onedrive-tui service restart",
+            "onedrive-rcd is not running (no socket at {})\nstart it with: onedrive-rc service restart",
             paths.socket().display()
         )
     })
@@ -49,7 +49,7 @@ pub fn status(paths: &Paths) -> Result<StatusReport> {
         Some(Response::Err { code, msg, .. }) => {
             anyhow::bail!("daemon could not report status [{code}]: {msg}")
         }
-        Some(other) => anyhow::bail!("unexpected reply from onedrived: {other:?}"),
+        Some(other) => anyhow::bail!("unexpected reply from onedrive-rcd: {other:?}"),
         None => status_from_database(paths),
     }
 }
@@ -59,8 +59,8 @@ fn status_from_database(paths: &Paths) -> Result<StatusReport> {
     let db = paths.state_db();
     if !db.exists() {
         anyhow::bail!(
-            "onedrived is not running and has never run (no state at {})\n\
-             set it up with: onedrive-tui setup",
+            "onedrive-rcd is not running and has never run (no state at {})\n\
+             set it up with: onedrive-rc setup",
             db.display()
         );
     }
@@ -68,8 +68,8 @@ fn status_from_database(paths: &Paths) -> Result<StatusReport> {
     let store = Store::open_readonly(&db)?;
     let daemon = store.daemon()?.ok_or_else(|| {
         anyhow::anyhow!(
-            "onedrived is not running and has no recorded state\n\
-             set it up with: onedrive-tui setup"
+            "onedrive-rcd is not running and has no recorded state\n\
+             set it up with: onedrive-rc setup"
         )
     })?;
 
@@ -153,7 +153,7 @@ pub const fn cli_version() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use onedrive_core::ipc::Health;
+    use onedrive_rc_core::ipc::Health;
 
     #[test]
     fn a_never_run_daemon_is_reported_as_such_with_a_next_step() {
@@ -163,7 +163,7 @@ mod tests {
         let err = status(&paths).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("has never run"), "{msg}");
-        assert!(msg.contains("onedrive-tui setup"), "{msg}");
+        assert!(msg.contains("onedrive-rc setup"), "{msg}");
     }
 
     /// The important fallback: a daemon that died leaves a readable database, and

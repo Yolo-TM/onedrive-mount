@@ -226,7 +226,7 @@ pub async fn run(local: &Path, now: DateTime<Utc>) -> Result<Vec<Conflict>> {
             warn!(
                 path = %canonical,
                 restored_from = %best.path.file_name().unwrap_or_default().to_string_lossy(),
-                code = onedrive_core::Code::Conflict.as_str(),
+                code = onedrive_rc_core::Code::Conflict.as_str(),
                 "both sides changed with identical timestamps, so rclone left no winner; \
                  restored the canonical name from the larger copy"
             );
@@ -260,7 +260,7 @@ pub async fn run(local: &Path, now: DateTime<Utc>) -> Result<Vec<Conflict>> {
                 path = %canonical,
                 copy = %target_name,
                 side = candidate.side.as_str(),
-                code = onedrive_core::Code::Conflict.as_str(),
+                code = onedrive_rc_core::Code::Conflict.as_str(),
                 "kept both versions of a conflicting file"
             );
 
