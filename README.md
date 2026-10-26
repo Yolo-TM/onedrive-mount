@@ -99,11 +99,37 @@ in {
 sudo nixos-rebuild switch
 ```
 
+### NixOS — declare each user's mounts and pins (no Home Manager)
+
+`services.onedrive-rc.userConfigs.<user>` takes the same options as the Home
+Manager module below and writes `~/.config/onedrive-rc/config.toml` for that
+user, as a symlink into the Nix store (via `systemd.tmpfiles`). Users listed
+here get linger automatically.
+
+```nix
+services.onedrive-rc = {
+  enable = true;
+  userConfigs.yourusername.remotes.onedrive-timm = {
+    mount_point = "~/OneDrive";
+    pins.Keepass = {
+      remote_path = "Dokumente/Keepass";
+      local_path = "~/onedrive-keepass";
+    };
+  };
+};
+```
+
+Things to know: the file is read-only, and the first switch **replaces** an
+existing hand-written `config.toml` for that user (move it aside first if you
+want to keep it). The rclone remote must already exist in that user's
+`rclone.conf` — run `onedrive-rc setup` once as that user to authenticate. Don't
+declare the same user here *and* in Home Manager; they would fight over the file.
+
 ### Home Manager — declare `config.toml` itself
 
 `services.onedrive-rc` (NixOS, above) installs the package and the systemd user
-unit, but mount points, pins and VFS tuning are inherently per-user, so they
-live in their own module. `homeManagerModules.default` generates
+unit, but mount points, pins and VFS tuning are per-user, so they can live in
+their own module. `homeManagerModules.default` generates
 `~/.config/onedrive-rc/config.toml` from Nix options instead — every key in
 [`config.example.toml`](config.example.toml) is an option here, with the same
 defaults, so declaring nothing beyond `mount_point` gets you the same sensible
