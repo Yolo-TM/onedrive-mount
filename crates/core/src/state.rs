@@ -1213,7 +1213,8 @@ mod tests {
     #[test]
     fn heartbeat_distinguishes_idle_from_wedged() {
         let s = Store::open_memory().unwrap();
-        s.daemon_started(4242, "0.3.0", now()).unwrap();
+        s.daemon_started(4242, env!("CARGO_PKG_VERSION"), now())
+            .unwrap();
 
         let d = s.daemon().unwrap().unwrap();
         assert_eq!(d.pid, 4242);
@@ -1239,12 +1240,14 @@ mod tests {
     #[test]
     fn restart_replaces_the_daemon_row_and_clears_stale_config_errors() {
         let s = Store::open_memory().unwrap();
-        s.daemon_started(1, "0.3.0", now()).unwrap();
+        s.daemon_started(1, env!("CARGO_PKG_VERSION"), now())
+            .unwrap();
         s.set_config_error(Some("bad")).unwrap();
         assert!(s.daemon().unwrap().unwrap().config_error.is_some());
 
         let restart = now() + chrono::Duration::seconds(10);
-        s.daemon_started(2, "0.3.0", restart).unwrap();
+        s.daemon_started(2, env!("CARGO_PKG_VERSION"), restart)
+            .unwrap();
         let d = s.daemon().unwrap().unwrap();
         assert_eq!(d.pid, 2);
         assert_eq!(d.started_at, restart);
@@ -1257,7 +1260,8 @@ mod tests {
     #[test]
     fn clean_shutdown_is_distinguishable_from_a_stale_heartbeat() {
         let s = Store::open_memory().unwrap();
-        s.daemon_started(1, "0.3.0", now()).unwrap();
+        s.daemon_started(1, env!("CARGO_PKG_VERSION"), now())
+            .unwrap();
         s.daemon_stopped().unwrap();
         assert_eq!(s.daemon().unwrap().unwrap().state, DaemonState::Stopping);
     }
@@ -1882,7 +1886,8 @@ mod tests {
         let path = dir.path().join("state.db");
         {
             let s = Store::open(&path).unwrap();
-            s.daemon_started(99, "0.3.0", now()).unwrap();
+            s.daemon_started(99, env!("CARGO_PKG_VERSION"), now())
+                .unwrap();
         }
 
         let ro = Store::open_readonly(&path).unwrap();

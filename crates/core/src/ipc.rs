@@ -544,7 +544,7 @@ mod tests {
         StatusReport {
             protocol: PROTOCOL_VERSION,
             source: ReportSource::Daemon,
-            version: "0.3.0".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
             pid: 1234,
             started_at: now(),
             heartbeat_at: now(),
@@ -835,7 +835,7 @@ mod tests {
             assert_eq!(decode_frame::<Request>(line.trim()).unwrap(), Request::Ping);
 
             let resp = Response::Pong {
-                version: "0.3.0".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
                 protocol: PROTOCOL_VERSION,
             };
             let mut stream = &stream;
@@ -846,7 +846,7 @@ mod tests {
         assert_eq!(
             resp,
             Response::Pong {
-                version: "0.3.0".into(),
+                version: env!("CARGO_PKG_VERSION").into(),
                 protocol: PROTOCOL_VERSION
             }
         );

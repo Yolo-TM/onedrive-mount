@@ -525,7 +525,7 @@ mod tests {
         StatusReport {
             protocol: onedrive_rc_core::ipc::PROTOCOL_VERSION,
             source: ReportSource::Daemon,
-            version: "0.3.0".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
             pid: 1234,
             started_at: now() - Duration::days(9) - Duration::hours(4),
             heartbeat_at: now() - Duration::seconds(3),

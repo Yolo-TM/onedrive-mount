@@ -175,7 +175,9 @@ mod tests {
 
         {
             let store = Store::open(&paths.state_db()).unwrap();
-            store.daemon_started(4242, "0.3.0", Utc::now()).unwrap();
+            store
+                .daemon_started(4242, env!("CARGO_PKG_VERSION"), Utc::now())
+                .unwrap();
             store
                 .register_pin("Keepass", "od", "Dokumente/Keepass", "/home/t/k")
                 .unwrap();
@@ -208,7 +210,9 @@ mod tests {
         .unwrap();
         {
             let store = Store::open(&paths.state_db()).unwrap();
-            store.daemon_started(1, "0.3.0", Utc::now()).unwrap();
+            store
+                .daemon_started(1, env!("CARGO_PKG_VERSION"), Utc::now())
+                .unwrap();
         }
 
         let report = status(&paths).unwrap();
@@ -226,7 +230,9 @@ mod tests {
         std::fs::write(paths.config_file(), "this is not = valid = toml").unwrap();
         {
             let store = Store::open(&paths.state_db()).unwrap();
-            store.daemon_started(1, "0.3.0", Utc::now()).unwrap();
+            store
+                .daemon_started(1, env!("CARGO_PKG_VERSION"), Utc::now())
+                .unwrap();
             store
                 .set_config_error(Some("2 problems in the config"))
                 .unwrap();

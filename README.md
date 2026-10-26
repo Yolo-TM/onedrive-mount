@@ -9,7 +9,7 @@ conflicted file in favor of another.
 
 ```nix
 {
-  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.1";
+  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.2";
 
   outputs = { nixpkgs, onedrive-rc, ... }: {
     nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
@@ -85,7 +85,7 @@ the component READMEs for *how*.
 ```nix
 { config, pkgs, lib, ... }:
 let
-  onedrive-rc = builtins.getFlake "github:Yolo-TM/onedrive-mount/v0.3.1";
+  onedrive-rc = builtins.getFlake "github:Yolo-TM/onedrive-mount/v0.3.2";
 in {
   imports = [ onedrive-rc.nixosModules.default ];
   services.onedrive-rc = {
@@ -111,7 +111,7 @@ VFS/FUSE defaults the example file documents.
 
 ```nix
 {
-  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.1";
+  inputs.onedrive-rc.url = "github:Yolo-TM/onedrive-mount/v0.3.2";
 
   outputs = { home-manager, onedrive-rc, ... }: {
     homeConfigurations.yourusername = home-manager.lib.homeManagerConfiguration {
@@ -142,7 +142,7 @@ VFS/FUSE defaults the example file documents.
 
 The attribute name (`onedrive-timm` above) becomes the rclone remote name —
 it must already exist in `rclone.conf`, authenticated, which this module does
-not do for you: run `rclone config create onedrive-timm onedrive-rc` (or plain
+not do for you: run `rclone config create onedrive-timm onedrive` (or plain
 interactive `rclone config`) first. After `home-manager switch` and
 authenticating, run `onedrive-rc setup` once: it detects the config this
 module already wrote and goes straight to installing/starting the service
