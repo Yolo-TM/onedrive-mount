@@ -289,6 +289,8 @@ pub struct Supervisor {
     /// entire point of it), so a flapping rclone child must never force an
     /// odfs remount, and vice versa.
     odfs: HashMap<String, fuser::BackgroundSession>,
+    /// Where each odfs session was mounted, for detaching it by path.
+    odfs_points: HashMap<String, PathBuf>,
 }
 
 impl Supervisor {
@@ -300,6 +302,7 @@ impl Supervisor {
             probes: HashMap::new(),
             status: HashMap::new(),
             odfs: HashMap::new(),
+            odfs_points: HashMap::new(),
         }
     }
 
@@ -379,14 +382,16 @@ impl Supervisor {
         let name = remote.name.clone();
         let mount_point = remote.mount_point(&self.paths);
 
-        if let Err(e) = tokio::fs::create_dir_all(&mount_point).await {
-            warn!(remote = %name, path = %mount_point.display(), error = %e, "could not create the odfs mount point");
-            return;
-        }
-        // A session left behind by a killed daemon cannot be mounted over.
+        // A session left behind by a killed daemon cannot be mounted over, and
+        // it also makes `create_dir_all` fail with EEXIST (stat gives ENOTCONN),
+        // so detach it *before* touching the directory.
         if matches!(probe(mount_point.clone()).await, Liveness::Stale) {
             warn!(remote = %name, path = %mount_point.display(), "odfs mount point is stale; detaching before remount");
             rclone::fusermount_unmount(&mount_point).await;
+        }
+        if let Err(e) = tokio::fs::create_dir_all(&mount_point).await {
+            warn!(remote = %name, path = %mount_point.display(), error = %e, "could not create the odfs mount point");
+            return;
         }
 
         // The actual `mount()` syscall and FUSE handshake are synchronous
@@ -405,6 +410,7 @@ impl Supervisor {
         match result {
             Ok(Ok(session)) => {
                 info!(remote = %name, path = %mount_point.display(), "odfs mounted");
+                self.odfs_points.insert(name.clone(), mount_point.clone());
                 self.odfs.insert(name, session);
             }
             Ok(Err(e)) => warn!(remote = %name, error = %e, "could not mount odfs; will retry"),
@@ -692,6 +698,55 @@ impl Supervisor {
             .insert(name.to_owned(), MountStatus::unmounted());
     }
 
+    /// Detach every FUSE mount before the machine suspends.
+    ///
+    /// A live mount whose server is frozen (or stuck on a dead network) leaves
+    /// anything that touches it — Dolphin, direnv, a shell — in
+    /// uninterruptible sleep inside `fuse_dentry_revalidate`, which the
+    /// freezer cannot freeze: suspend then fails and retries for minutes. A
+    /// lazy unmount plus dropping the sessions aborts the connections, so
+    /// clients get `ENOTCONN` instead of hanging. The reconcile loop mounts
+    /// everything again on resume.
+    ///
+    /// Bounded by `budget` as a whole; it must fit inside logind's inhibitor
+    /// delay, so nothing here waits on rclone to flush.
+    pub async fn release_for_suspend(&mut self, budget: Duration) {
+        let deadline = tokio::time::Instant::now() + budget;
+
+        // The overlay first: it is what the user's programs actually touch.
+        let sessions: Vec<(String, fuser::BackgroundSession)> = self.odfs.drain().collect();
+        for (name, _) in &sessions {
+            if let Some(point) = self.odfs_points.get(name) {
+                rclone::fusermount_unmount(point).await;
+            }
+        }
+        // Dropping a session joins its thread, which can block on a handler
+        // that is waiting on the (possibly hung) backing mount.
+        let drop_sessions = tokio::task::spawn_blocking(move || drop(sessions));
+        let _ = tokio::time::timeout_at(deadline, drop_sessions).await;
+
+        let names: Vec<String> = self.mounts.keys().cloned().collect();
+        for name in names {
+            let Some(mut entry) = self.mounts.remove(&name) else {
+                continue;
+            };
+            if let Some(pid) = entry.child.id() {
+                // SAFETY: we own this child and have not yet reaped it.
+                unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+            }
+            rclone::fusermount_unmount(&entry.mount_point).await;
+            if tokio::time::timeout_at(deadline, entry.child.wait())
+                .await
+                .is_err()
+            {
+                let _ = entry.child.start_kill();
+            }
+            let _ = tokio::fs::remove_file(rclone::rc_socket(&self.paths, &name)).await;
+            self.status.insert(name, MountStatus::unmounted());
+        }
+        info!("mounts released for suspend");
+    }
+
     /// Ask rclone to stop, and only force it if it will not.
     ///
     /// `SIGKILL` is the wrong default here: it leaves the FUSE mount attached
@@ -728,6 +783,9 @@ impl Supervisor {
     /// `onedrive-rc mount remount`.
     pub async fn force_remount(&mut self, name: &str) {
         info!(remote = %name, "remount requested");
+        // Dropping the session unmounts the overlay; the next reconcile mounts
+        // it afresh, which also recovers a stale `~/OneDrive`.
+        self.odfs.remove(name);
         let mount_point = self.recorded_mount_point(name);
         if let Some(entry) = self.mounts.remove(name) {
             self.terminate(entry, &mount_point).await;
@@ -1077,6 +1135,35 @@ mod tests {
             "an explicit remount should not wait out a backoff the user did not cause"
         );
         assert!(s.backoff["od"].ready());
+    }
+
+    #[tokio::test]
+    async fn releasing_for_suspend_stops_the_child_within_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = Supervisor::new(Paths::rooted(dir.path()));
+        // A child that ignores nothing special: SIGTERM ends it.
+        let child = tokio::process::Command::new("sleep")
+            .arg("60")
+            .spawn()
+            .unwrap();
+        s.mounts.insert(
+            "od".into(),
+            MountEntry {
+                child,
+                mount_point: dir.path().join("mnt"),
+                args: Vec::new(),
+                started_at: tokio::time::Instant::now(),
+                mounted_since: None,
+                ever_healthy: false,
+            },
+        );
+
+        let began = std::time::Instant::now();
+        s.release_for_suspend(Duration::from_secs(3)).await;
+
+        assert!(began.elapsed() < Duration::from_secs(4));
+        assert!(s.mounts.is_empty());
+        assert_eq!(s.status("od").state, MountState::Unmounted);
     }
 
     #[tokio::test]

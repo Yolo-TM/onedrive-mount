@@ -81,6 +81,23 @@ impl Notifier {
         self.send("WATCHDOG=1\n");
     }
 
+    /// Relax the watchdog just before the machine suspends. The daemon is
+    /// frozen with everything else, and on wake systemd can judge the deadline
+    /// missed before our timer has run once — which kills a perfectly healthy
+    /// daemon and, in a suspend/resume loop, restarts it hundreds of times.
+    pub fn watchdog_suspend(&self) {
+        if self.watchdog.is_some() {
+            self.send("WATCHDOG_USEC=3600000000\nWATCHDOG=1\n");
+        }
+    }
+
+    /// Restore the configured watchdog interval after waking.
+    pub fn watchdog_resume(&self) {
+        if let Some(d) = self.watchdog {
+            self.send(&format!("WATCHDOG_USEC={}\nWATCHDOG=1\n", d.as_micros()));
+        }
+    }
+
     /// Ask the manager to restart us now, rather than waiting out the watchdog
     /// interval. Used by the mount supervisor in P1 when it detects a wedge it
     /// cannot recover from in-process.

@@ -202,6 +202,9 @@ struct RcloneLine {
 /// Read rclone's stderr and re-emit each line into our own log.
 async fn ingest_log(stderr: tokio::process::ChildStderr, remote: String) {
     let mut lines = BufReader::new(stderr).lines();
+    // While offline rclone logs the same unreachable-network failure for every
+    // directory and file it touches; one line per window says it all.
+    let mut offline_noise = OfflineNoise::default();
 
     while let Ok(Some(line)) = lines.next_line().await {
         let line = line.trim();
@@ -210,7 +213,22 @@ async fn ingest_log(stderr: tokio::process::ChildStderr, remote: String) {
         }
 
         match serde_json::from_str::<RcloneLine>(line) {
-            Ok(entry) => emit(&entry, &remote),
+            Ok(entry) => {
+                if classify(&entry.msg) == Some(Code::Offline) {
+                    if let Some(suppressed) = offline_noise.admit(std::time::Instant::now()) {
+                        warn!(
+                            source = "rclone",
+                            remote = %remote,
+                            subject = %format!("mount/{remote}"),
+                            code = Code::Offline.as_str(),
+                            suppressed,
+                            "rclone cannot reach OneDrive (offline?); repeats suppressed"
+                        );
+                    }
+                    continue;
+                }
+                emit(&entry, &remote)
+            }
             // Not JSON: rclone emits a few plain-text lines before its logger is
             // configured, and FUSE itself can write here. Pass them through
             // rather than dropping them.
@@ -218,6 +236,32 @@ async fn ingest_log(stderr: tokio::process::ChildStderr, remote: String) {
         }
     }
     debug!(remote = %remote, "rclone log stream ended");
+}
+
+/// Collapses a flood of "network unreachable" lines into one per window.
+#[derive(Default)]
+struct OfflineNoise {
+    last: Option<std::time::Instant>,
+    suppressed: u64,
+}
+
+impl OfflineNoise {
+    const WINDOW: std::time::Duration = std::time::Duration::from_secs(300);
+
+    /// `Some(n)` when this line should be logged, `n` being how many were
+    /// swallowed since the previous one; `None` when it should be dropped.
+    fn admit(&mut self, now: std::time::Instant) -> Option<u64> {
+        match self.last {
+            Some(last) if now.duration_since(last) < Self::WINDOW => {
+                self.suppressed += 1;
+                None
+            }
+            _ => {
+                self.last = Some(now);
+                Some(std::mem::take(&mut self.suppressed))
+            }
+        }
+    }
 }
 
 fn emit(entry: &RcloneLine, remote: &str) {

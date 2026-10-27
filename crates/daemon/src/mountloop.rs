@@ -80,9 +80,10 @@ pub async fn run(
     // Hold a sleep inhibitor so logind gives us a window before suspending.
     // Optional: without it we simply get no warning, and the resume path
     // re-probes everything anyway.
-    let _inhibitor = match zbus::Connection::system().await {
-        Ok(conn) => lifecycle::inhibit_sleep(&conn).await,
-        Err(_) => None,
+    let system_bus = zbus::Connection::system().await.ok();
+    let mut inhibitor = match &system_bus {
+        Some(conn) => lifecycle::inhibit_sleep(conn).await,
+        None => None,
     };
 
     // `Unknown` until NetworkManager tells us otherwise. Treated as online so a
@@ -225,6 +226,7 @@ pub async fn run(
                 match event {
                     Event::Suspending => {
                         suspended = true;
+                        app.notifier().watchdog_suspend();
                         app.set_daemon_state(DaemonState::Suspending);
                         // Checkpoint only. A sync here would not fit inside
                         // logind's delay window, and being killed halfway
@@ -233,12 +235,31 @@ pub async fn run(
                             debug!(error = %e, "could not checkpoint before suspend");
                         }
                         app.event(corelog::Level::Info, None, "lifecycle", "suspending");
+
+                        // Detach the FUSE mounts: a mount that is frozen or
+                        // hung on the network blocks its clients where the
+                        // freezer cannot reach them, and suspend then fails
+                        // and retries for minutes.
+                        supervisor.release_for_suspend(lifecycle::INHIBIT_BUDGET).await;
+                        for remote in &app.config().remotes {
+                            app.set_mount_status(&remote.name, supervisor.status(&remote.name));
+                        }
+                        // Done: let logind suspend now instead of waiting out
+                        // its delay. A new one is taken on resume.
+                        inhibitor = None;
                     }
 
                     Event::Resumed => {
                         suspended = false;
+                        app.notifier().watchdog_resume();
                         info!("resumed; re-checking mounts");
                         app.event(corelog::Level::Info, None, "lifecycle", "resumed from suspend");
+
+                        if inhibitor.is_none()
+                            && let Some(conn) = &system_bus
+                        {
+                            inhibitor = lifecycle::inhibit_sleep(conn).await;
+                        }
 
                         // Let the network settle before judging anything.
                         tokio::time::sleep(RESUME_SETTLE).await;

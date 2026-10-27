@@ -188,7 +188,12 @@ impl State {
         else {
             return;
         };
-        self.message = Some(match client::try_request(paths, &req) {
+        self.send(paths, &req);
+    }
+
+    /// Send one request and show the daemon's answer in the footer.
+    fn send(&mut self, paths: &Paths, req: &Request) {
+        self.message = Some(match client::try_request(paths, req) {
             Ok(Some(Response::Ok { msg })) => msg,
             Ok(Some(Response::Err { msg, .. })) => format!("error: {msg}"),
             Ok(Some(_)) | Ok(None) => "onedrive-rcd is not running".to_string(),
@@ -266,6 +271,8 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, paths: &Paths) 
             KeyCode::Tab => state.switch_pane(state.pane.next()),
             KeyCode::BackTab => state.switch_pane(state.pane.prev()),
             KeyCode::Char('r') => state.refresh(paths),
+            KeyCode::Char('c') => state.send(paths, &Request::IndexRefresh { full: true }),
+            KeyCode::Char('m') => state.send(paths, &Request::MountRemount { remote: None }),
             KeyCode::Down | KeyCode::Char('j') => {
                 state.selected = move_selection(
                     state.selected,
@@ -399,7 +406,8 @@ fn render_list(f: &mut Frame, area: Rect, pane: Pane, items: Vec<ListItem>, sele
 
 fn draw_footer(f: &mut Frame, area: Rect, state: &State) {
     let text = state.message.clone().unwrap_or_else(|| {
-        "Tab: switch pane  ↑/↓: select  Enter: act  r: refresh  q: quit".to_string()
+        "Tab: pane  ↑/↓: select  Enter: act  c: crawl  m: mount/remount  r: refresh  q: quit"
+            .to_string()
     });
     f.render_widget(Paragraph::new(text), area);
 }
