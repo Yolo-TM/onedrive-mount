@@ -1522,6 +1522,15 @@ mod tests {
     /// than inventing content — the honest answer when nothing ever cached it.
     #[test]
     fn a_read_with_nothing_cached_at_all_fails_rather_than_inventing_content() {
+        // Print fuser's own warnings with a failure, e.g. "Reply not sent for
+        // operation N, replying with I/O error", which is how a handler that
+        // dropped its reply turns into a bare EIO. Without this the failure
+        // seen on CI shows the errno but not why.
+        let _ = tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_max_level(tracing::Level::WARN)
+            .try_init();
+
         let dir = tempfile::tempdir().unwrap();
         let backing = dir.path().join("backing");
         let mount_point = dir.path().join("mnt");
