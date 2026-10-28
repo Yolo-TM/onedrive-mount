@@ -61,7 +61,12 @@ pub async fn run(
     reconcile.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let mut lifecycle_rx = lifecycle::subscribe().await;
-    let mut notifier = Notifier::connect().await;
+    // Unit tests drive this loop for real; they must not reach the desktop.
+    let mut notifier = if cfg!(test) {
+        Notifier::disabled()
+    } else {
+        Notifier::connect().await
+    };
     let mut scheduler = Scheduler::default();
 
     // Watch the pinned directories so a save syncs in seconds rather than at

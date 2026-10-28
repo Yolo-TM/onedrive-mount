@@ -145,6 +145,17 @@ impl Notifier {
         }
     }
 
+    /// A notifier that delivers nothing. For tests: `connect` reaches the real
+    /// session bus, and the alerts are critical and resident, so a test that
+    /// provoked a conflict left a notification on the developer's desktop
+    /// that never went away.
+    pub fn disabled() -> Self {
+        Self {
+            conn: None,
+            ids: HashMap::new(),
+        }
+    }
+
     /// Whether notifications will actually be delivered.
     pub fn is_available(&self) -> bool {
         self.conn.is_some()

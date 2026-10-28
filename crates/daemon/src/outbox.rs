@@ -434,7 +434,7 @@ mod tests {
         alias_conf(&paths, &remote_dir);
         let r = remote(dir.path());
         let app = test_app(&paths, dir.path());
-        let mut notifier = Notifier::connect().await;
+        let mut notifier = Notifier::disabled();
 
         app.with_store(|s| stage_write(s, &r, &paths, "new.txt", b"brand new", None, now()))
             .unwrap();
@@ -467,7 +467,7 @@ mod tests {
         alias_conf(&paths, &remote_dir);
         let r = remote(dir.path());
         let app = test_app(&paths, dir.path());
-        let mut notifier = Notifier::connect().await;
+        let mut notifier = Notifier::disabled();
 
         // The baseline this edit started from: what "original" actually hashes
         // to on the alias backend.
@@ -531,7 +531,7 @@ mod tests {
         alias_conf(&paths, &remote_dir);
         let r = remote(dir.path());
         let app = test_app(&paths, dir.path());
-        let mut notifier = Notifier::connect().await;
+        let mut notifier = Notifier::disabled();
 
         // Baseline recorded from "original", but the remote is edited again
         // before replay runs — simulating a change from elsewhere.
@@ -612,7 +612,7 @@ mod tests {
         std::fs::write(paths.rclone_config(), "").unwrap();
         let r = remote(dir.path());
         let app = test_app(&paths, dir.path());
-        let mut notifier = Notifier::connect().await;
+        let mut notifier = Notifier::disabled();
 
         app.with_store(|s| stage_write(s, &r, &paths, "a.txt", b"hello", None, now()))
             .unwrap();
