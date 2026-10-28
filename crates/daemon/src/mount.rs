@@ -22,7 +22,7 @@
 //! `kill_on_drop(true)`, but it matters here too: dropping a [`MountEntry`] is
 //! sufficient to stop its child.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -291,6 +291,10 @@ pub struct Supervisor {
     odfs: HashMap<String, fuser::BackgroundSession>,
     /// Where each odfs session was mounted, for detaching it by path.
     odfs_points: HashMap<String, PathBuf>,
+    /// Remotes the user unmounted on purpose. Reconcile leaves them alone until
+    /// they are mounted again, otherwise the next tick would undo the unmount.
+    /// Deliberately not persisted: a daemon restart mounts everything again.
+    held: HashSet<String>,
 }
 
 impl Supervisor {
@@ -303,6 +307,7 @@ impl Supervisor {
             status: HashMap::new(),
             odfs: HashMap::new(),
             odfs_points: HashMap::new(),
+            held: HashSet::new(),
         }
     }
 
@@ -354,6 +359,9 @@ impl Supervisor {
         self.odfs.retain(|name, _| wanted.contains(&name.as_str()));
 
         for remote in enabled {
+            if self.held.contains(&remote.name) {
+                continue;
+            }
             self.reconcile_one(remote, log_level).await;
             self.reconcile_odfs(remote).await;
         }
@@ -779,13 +787,59 @@ impl Supervisor {
         }
     }
 
+    /// Unmount the overlay for `name`, lazily first so a busy `~/OneDrive`
+    /// (an open file, a shell inside it) cannot keep the old session mounted
+    /// and make the replacement mount fail or stack on top of it.
+    async fn detach_odfs(&mut self, name: &str) {
+        let session = self.odfs.remove(name);
+        let point = self.odfs_points.remove(name);
+        if let Some(point) = point
+            && session.is_some()
+        {
+            rclone::fusermount_unmount(&point).await;
+        }
+        // Joining the session thread can block on a handler waiting for the
+        // backing mount, so keep it off the executor.
+        if let Some(session) = session {
+            let _ = tokio::time::timeout(
+                Duration::from_secs(5),
+                tokio::task::spawn_blocking(move || drop(session)),
+            )
+            .await;
+        }
+    }
+
+    /// Unmount a remote on the user's say-so and keep it unmounted until
+    /// [`Supervisor::mount_now`]. Driven by `onedrive-rc mount unmount`.
+    pub async fn unmount_now(&mut self, name: &str) {
+        info!(remote = %name, "unmount requested");
+        self.held.insert(name.to_owned());
+        self.detach_odfs(name).await;
+        self.stop(name).await;
+    }
+
+    /// Lift a hold from [`Supervisor::unmount_now`]; the next reconcile mounts
+    /// the remote. A no-op for a remote that is already mounted.
+    pub fn mount_now(&mut self, name: &str) {
+        info!(remote = %name, "mount requested");
+        self.held.remove(name);
+        self.backoff
+            .entry(name.to_owned())
+            .or_default()
+            .record_success();
+    }
+
+    /// Whether the user unmounted this remote on purpose.
+    pub fn is_held(&self, name: &str) -> bool {
+        self.held.contains(name)
+    }
+
     /// Force an immediate remount, bypassing the backoff. Driven by
     /// `onedrive-rc mount remount`.
     pub async fn force_remount(&mut self, name: &str) {
         info!(remote = %name, "remount requested");
-        // Dropping the session unmounts the overlay; the next reconcile mounts
-        // it afresh, which also recovers a stale `~/OneDrive`.
-        self.odfs.remove(name);
+        self.held.remove(name);
+        self.detach_odfs(name).await;
         let mount_point = self.recorded_mount_point(name);
         if let Some(entry) = self.mounts.remove(name) {
             self.terminate(entry, &mount_point).await;
@@ -1164,6 +1218,24 @@ mod tests {
         assert!(began.elapsed() < Duration::from_secs(4));
         assert!(s.mounts.is_empty());
         assert_eq!(s.status("od").state, MountState::Unmounted);
+    }
+
+    #[tokio::test]
+    async fn an_unmounted_remote_stays_down_until_mounted_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = Supervisor::new(Paths::rooted(dir.path()));
+
+        s.unmount_now("od").await;
+        assert!(s.is_held("od"));
+        assert_eq!(s.status("od").state, MountState::Unmounted);
+
+        s.mount_now("od");
+        assert!(!s.is_held("od"));
+
+        // A remount is an explicit "bring it up", so it lifts a hold too.
+        s.unmount_now("od").await;
+        s.force_remount("od").await;
+        assert!(!s.is_held("od"));
     }
 
     #[tokio::test]

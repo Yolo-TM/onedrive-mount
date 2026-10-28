@@ -38,6 +38,10 @@ pub enum Request {
     PinSync { name: Option<String> },
     /// Force a remount.
     MountRemount { remote: Option<String> },
+    /// Mount a remote the user unmounted, or any that is down. No-op if up.
+    MountUp { remote: Option<String> },
+    /// Unmount and keep it unmounted until [`Request::MountUp`].
+    MountDown { remote: Option<String> },
     /// Refresh the offline index.
     IndexRefresh { full: bool },
     /// Every conflict that is still open.
@@ -711,6 +715,10 @@ mod tests {
             },
             Request::PinSync { name: None },
             Request::MountRemount { remote: None },
+            Request::MountUp { remote: None },
+            Request::MountDown {
+                remote: Some("od".into()),
+            },
             Request::IndexRefresh { full: true },
             Request::ConflictList,
             Request::ConflictResolve {

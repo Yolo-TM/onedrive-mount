@@ -41,6 +41,9 @@ in {
       systemd.user.services.onedrive-rcd = {
         Unit = {
           Description = "OneDrive daemon";
+          # Never give up restarting; a daemon that stopped trying is useless.
+          # A [Unit] setting: under [Service] systemd ignores it.
+          StartLimitIntervalSec = 0;
         };
         Service = {
           Type = "notify";
@@ -48,8 +51,6 @@ in {
           ExecStart = "${cfg.package}/bin/onedrive-rcd";
           Restart = "always";
           RestartSec = 2;
-          # Never give up restarting; a daemon that stopped trying is useless.
-          StartLimitIntervalSec = 0;
           # A daemon wedged on a hung FUSE mount stops pinging and gets
           # restarted, instead of sitting "active" doing nothing forever.
           WatchdogSec = 60;

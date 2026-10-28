@@ -80,6 +80,12 @@ pub fn install(paths: &Paths) -> Result<String> {
 }
 
 pub fn uninstall(paths: &Paths) -> Result<String> {
+    uninstall_with(paths, systemctl)
+}
+
+/// [`uninstall`] with the `systemctl` runner passed in, so tests can exercise
+/// it without stopping the real daemon in the developer's own session.
+fn uninstall_with(paths: &Paths, systemctl: impl Fn(&[&str]) -> Result<()>) -> Result<String> {
     let mut log = String::new();
 
     // Ignore failures here: the point is to end up stopped and gone, and the
@@ -202,10 +208,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::rooted(dir.path());
 
-        // systemctl calls are tolerated to fail here; the file handling is what
-        // must behave.
-        let log = uninstall(&paths).expect("uninstall should be idempotent");
+        // A fake runner: the real one would `disable --now` the daemon that is
+        // running in the session this test happens to run in.
+        let calls = std::cell::RefCell::new(Vec::new());
+        let log = uninstall_with(&paths, |args| {
+            calls.borrow_mut().push(args.join(" "));
+            Ok(())
+        })
+        .expect("uninstall should be idempotent");
         assert!(log.contains("was not installed"), "{log}");
+        assert_eq!(calls.borrow().len(), 2, "{:?}", calls.borrow());
     }
 
     #[test]

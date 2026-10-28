@@ -35,6 +35,9 @@ Description=OneDrive daemon
 Documentation=https://github.com/Yolo-TM/onedrive-mount
 # Deliberately no After=network-online.target: that is a system unit and has no
 # effect here. Network readiness is handled at runtime over D-Bus.
+# Never stop trying to restart; the daemon is useless if it gives up. This only
+# works in the unit section: in the service section systemd ignores it.
+StartLimitIntervalSec=0
 
 [Service]
 Type=notify
@@ -42,8 +45,6 @@ NotifyAccess=main
 ExecStart={exec}
 Restart=always
 RestartSec=2
-# Never stop trying to restart; the daemon is useless if it gives up.
-StartLimitIntervalSec=0
 # A wedged daemon stops pinging and gets restarted rather than hanging forever.
 WatchdogSec=60
 TimeoutStopSec=30
@@ -69,7 +70,11 @@ mod tests {
         assert!(unit.contains("NotifyAccess=main"));
         assert!(unit.contains("WatchdogSec=60"));
         assert!(unit.contains("Restart=always"));
-        assert!(unit.contains("StartLimitIntervalSec=0"));
+        let service_at = unit.find("[Service]").unwrap();
+        assert!(
+            unit.find("StartLimitIntervalSec=0").unwrap() < service_at,
+            "StartLimitIntervalSec belongs in [Unit]; in [Service] systemd ignores it"
+        );
         assert!(unit.contains("WantedBy=default.target"));
     }
 

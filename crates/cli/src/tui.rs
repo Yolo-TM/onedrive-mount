@@ -272,7 +272,9 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, paths: &Paths) 
             KeyCode::BackTab => state.switch_pane(state.pane.prev()),
             KeyCode::Char('r') => state.refresh(paths),
             KeyCode::Char('c') => state.send(paths, &Request::IndexRefresh { full: true }),
-            KeyCode::Char('m') => state.send(paths, &Request::MountRemount { remote: None }),
+            KeyCode::Char('m') => state.send(paths, &Request::MountUp { remote: None }),
+            KeyCode::Char('u') => state.send(paths, &Request::MountDown { remote: None }),
+            KeyCode::Char('R') => state.send(paths, &Request::MountRemount { remote: None }),
             KeyCode::Down | KeyCode::Char('j') => {
                 state.selected = move_selection(
                     state.selected,
@@ -406,7 +408,7 @@ fn render_list(f: &mut Frame, area: Rect, pane: Pane, items: Vec<ListItem>, sele
 
 fn draw_footer(f: &mut Frame, area: Rect, state: &State) {
     let text = state.message.clone().unwrap_or_else(|| {
-        "Tab: pane  ↑/↓: select  Enter: act  c: crawl  m: mount/remount  r: refresh  q: quit"
+        "Tab: pane  ↑/↓: select  Enter: act  c: crawl  m: mount  u: unmount  R: remount  r: refresh  q: quit"
             .to_string()
     });
     f.render_widget(Paragraph::new(text), area);

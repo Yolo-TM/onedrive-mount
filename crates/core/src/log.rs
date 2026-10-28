@@ -461,6 +461,16 @@ mod tests {
     }
 
     #[test]
+    fn a_local_time_stamp_with_an_offset_parses_to_the_same_instant() {
+        let line = r#"{"timestamp":"2026-10-08T12:40:43.564763916+02:00","level":"INFO","target":"t","fields":{"message":"m"}}"#;
+        let record: Record = serde_json::from_str(line).unwrap();
+        assert_eq!(
+            record.timestamp,
+            at(10, 40, 43) + chrono::Duration::nanoseconds(564_763_916)
+        );
+    }
+
+    #[test]
     fn renders_the_documented_layout() {
         let r = record(
             Level::Warn,

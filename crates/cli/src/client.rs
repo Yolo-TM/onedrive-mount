@@ -18,7 +18,7 @@ use onedrive_rc_core::ipc::{
     RemoteStatus, ReportSource, Request, Response, StatusReport,
 };
 use onedrive_rc_core::paths::Paths;
-use onedrive_rc_core::state::Store;
+use onedrive_rc_core::state::{PinState, Store};
 use onedrive_rc_core::{VERSION, log as corelog};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -108,7 +108,15 @@ fn status_from_database(paths: &Paths) -> Result<StatusReport> {
                 name: p.name,
                 remote: p.remote,
                 local_path: p.local_path,
-                state: p.state.as_str().to_string(),
+                // The daemon is not running, so "in-sync" or "syncing" is only
+                // what it last wrote down, not something that is true now.
+                // Bad news stays as recorded; good news is not vouched for.
+                state: match p.state {
+                    PinState::InSync | PinState::Syncing => PinState::Unknown,
+                    other => other,
+                }
+                .as_str()
+                .to_string(),
                 last_ok: p.last_ok,
                 last_err: p.last_err,
                 last_err_code: p.last_err_code,
@@ -196,6 +204,49 @@ mod tests {
             "a database-sourced report is never healthy"
         );
         assert!(why.iter().any(|w| w.contains("not answering")), "{why:?}");
+    }
+
+    /// A dead daemon cannot vouch for a pin it last saw "in-sync".
+    #[test]
+    fn the_fallback_does_not_present_a_stale_in_sync_pin_as_current() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::rooted(dir.path());
+        {
+            let store = Store::open(&paths.state_db()).unwrap();
+            store
+                .daemon_started(1, env!("CARGO_PKG_VERSION"), Utc::now())
+                .unwrap();
+            store.register_pin("Ok", "od", "a", "/h/a").unwrap();
+            store.register_pin("Bad", "od", "b", "/h/b").unwrap();
+            store
+                .set_pin_state("Ok", PinState::InSync, Utc::now(), None)
+                .unwrap();
+            store
+                .set_pin_state("Bad", PinState::Conflicted, Utc::now(), None)
+                .unwrap();
+        }
+
+        let report = status(&paths).unwrap();
+        let state = |n: &str| {
+            report
+                .pins
+                .iter()
+                .find(|p| p.name == n)
+                .unwrap()
+                .state
+                .clone()
+        };
+        assert_eq!(state("Ok"), "unknown");
+        assert!(
+            report
+                .pins
+                .iter()
+                .find(|p| p.name == "Ok")
+                .unwrap()
+                .last_ok
+                .is_some()
+        );
+        assert_eq!(state("Bad"), "conflicted", "bad news stays as recorded");
     }
 
     #[test]

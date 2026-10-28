@@ -86,6 +86,12 @@ fn crawl_args(remote: &RemoteConfig, paths: &Paths) -> Vec<String> {
         format!("{}:", remote.name),
         "--hash".into(),
         "-R".into(),
+        // Microsoft's Personal Vault is locked behind a separate identity check
+        // and cannot be listed through the API (`ObjectHandle is Invalid`).
+        // rclone exits non-zero over it, and a crawl that did not fully succeed
+        // is discarded whole, so one unlistable folder meant the index was
+        // never built.
+        "--exclude=/Personal Vault/**".into(),
         format!("--config={}", paths.rclone_config().display()),
         format!("--tpslimit={}", remote.index.tpslimit),
         "--timeout=30s".into(),
@@ -202,6 +208,7 @@ mod tests {
         assert!(joined.contains("--hash"), "{joined}");
         assert!(joined.contains("-R"), "{joined}");
         assert!(joined.contains("--tpslimit=10"), "{joined}");
+        assert!(joined.contains("--exclude=/Personal Vault/**"), "{joined}");
     }
 
     #[test]

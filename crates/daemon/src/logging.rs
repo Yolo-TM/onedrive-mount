@@ -41,7 +41,11 @@ where
 {
     fmt::layer()
         .json()
-        .with_timer(fmt::time::ChronoUtc::rfc_3339())
+        // The system's timezone, with its UTC offset in the stamp so the line is
+        // still unambiguous. UTC here put every raw log line an hour or two off
+        // the wall clock, and off from the local times rclone writes inside its
+        // own messages.
+        .with_timer(fmt::time::ChronoLocal::rfc_3339())
         .with_current_span(false)
         .with_span_list(false)
         .with_target(true)

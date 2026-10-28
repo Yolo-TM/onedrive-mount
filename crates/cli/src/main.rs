@@ -180,6 +180,16 @@ enum OutboxAction {
 
 #[derive(Debug, Subcommand)]
 enum MountAction {
+    /// Mount now (also lifts an earlier `unmount`).
+    Mount {
+        /// Remote name; omit for all enabled remotes.
+        remote: Option<String>,
+    },
+    /// Unmount and stay unmounted until `mount` (or a daemon restart).
+    Unmount {
+        /// Remote name; omit for all enabled remotes.
+        remote: Option<String>,
+    },
     /// Remount now, without waiting out any restart backoff.
     Remount {
         /// Remote name; omit for all enabled remotes.
@@ -364,18 +374,22 @@ fn dispatch(cli: &Cli, paths: &Paths) -> Result<i32> {
             Ok(0)
         }
 
-        Some(Cmd::Mount { action }) => match action {
-            MountAction::Remount { remote } => {
-                let response = client::request(
-                    paths,
-                    &Request::MountRemount {
-                        remote: remote.clone(),
-                    },
-                )?;
-                print_response(&response);
-                Ok(exit_for(&response))
-            }
-        },
+        Some(Cmd::Mount { action }) => {
+            let request = match action {
+                MountAction::Mount { remote } => Request::MountUp {
+                    remote: remote.clone(),
+                },
+                MountAction::Unmount { remote } => Request::MountDown {
+                    remote: remote.clone(),
+                },
+                MountAction::Remount { remote } => Request::MountRemount {
+                    remote: remote.clone(),
+                },
+            };
+            let response = client::request(paths, &request)?;
+            print_response(&response);
+            Ok(exit_for(&response))
+        }
 
         Some(Cmd::Setup { reauth }) => setup::run(paths, reauth.as_deref()),
     }
@@ -469,6 +483,18 @@ mod tests {
             }) => assert_eq!(remote, None),
             other => panic!("unexpected {other:?}"),
         }
+        assert!(matches!(
+            Cli::parse_from(["onedrive-rc", "mount", "unmount"]).command,
+            Some(Cmd::Mount {
+                action: MountAction::Unmount { remote: None }
+            })
+        ));
+        assert!(matches!(
+            Cli::parse_from(["onedrive-rc", "mount", "mount", "od"]).command,
+            Some(Cmd::Mount {
+                action: MountAction::Mount { remote: Some(_) }
+            })
+        ));
         match Cli::parse_from(["onedrive-rc", "mount", "remount", "od"]).command {
             Some(Cmd::Mount {
                 action: MountAction::Remount { remote },

@@ -195,11 +195,7 @@ pub async fn run(
 
                     Control::Remount { remote } => {
                         let config = app.config();
-                        let targets: Vec<String> = match remote {
-                            Some(name) => vec![name],
-                            None => config.enabled_remotes().map(|r| r.name.clone()).collect(),
-                        };
-                        for name in targets {
+                        for name in remotes_or_all(&config, remote) {
                             supervisor.force_remount(&name).await;
                             app.set_mount_status(&name, supervisor.status(&name));
                         }
@@ -208,7 +204,26 @@ pub async fn run(
                         reconcile_now(&app, &mut supervisor).await;
                     }
 
-                    Control::IndexRefresh => crawl_all(&app).await,
+                    Control::Mount { remote } => {
+                        let config = app.config();
+                        for name in remotes_or_all(&config, remote) {
+                            supervisor.mount_now(&name);
+                        }
+                        reconcile_now(&app, &mut supervisor).await;
+                    }
+
+                    Control::Unmount { remote } => {
+                        let config = app.config();
+                        for name in remotes_or_all(&config, remote) {
+                            supervisor.unmount_now(&name).await;
+                            app.set_mount_status(&name, supervisor.status(&name));
+                        }
+                    }
+
+                    // A crawl takes minutes. Run inline it would hold this loop,
+                    // so a remount, an unmount or the suspend handler would
+                    // wait behind it.
+                    Control::IndexRefresh => spawn_crawl(&app),
 
                     Control::OutboxRetry { remote } => {
                         replay_outbox_all(&app, &mut notifier, remote.as_deref()).await;
@@ -218,7 +233,8 @@ pub async fn run(
 
             _ = index_tick.tick() => {
                 if !suspended && online {
-                    crawl_due_remotes(&app).await;
+                    let app = Arc::clone(&app);
+                    tokio::spawn(async move { crawl_due_remotes(&app).await });
                 }
             }
 
@@ -435,9 +451,33 @@ async fn replay_outbox_all(app: &Arc<App>, notifier: &mut Notifier, only: Option
 /// Crawl every enabled remote, unconditionally. What `onedrive-rc index
 /// refresh` asks for.
 async fn crawl_all(app: &Arc<App>) {
+    // One crawl at a time: a second request while one runs would only repeat
+    // the same minutes of listing against OneDrive's rate limit.
+    if !app.begin_crawl() {
+        debug!("a crawl is already running; skipping");
+        return;
+    }
     let config = app.config();
     for remote in config.enabled_remotes() {
         crawl_one(app, remote).await;
+    }
+    app.end_crawl();
+}
+
+/// Crawl in the background so the supervisor loop stays responsive.
+fn spawn_crawl(app: &Arc<App>) {
+    let app = Arc::clone(app);
+    tokio::spawn(async move { crawl_all(&app).await });
+}
+
+/// The named remote, or every enabled one when none is named.
+fn remotes_or_all(
+    config: &onedrive_rc_core::config::Config,
+    remote: Option<String>,
+) -> Vec<String> {
+    match remote {
+        Some(name) => vec![name],
+        None => config.enabled_remotes().map(|r| r.name.clone()).collect(),
     }
 }
 

@@ -61,6 +61,8 @@ pub struct App {
     reload_tx: mpsc::Sender<()>,
     /// Requests from the CLI that the supervisor task has to action.
     control_tx: mpsc::Sender<Control>,
+    /// Set while a crawl runs, so only one does at a time.
+    crawling: std::sync::atomic::AtomicBool,
 }
 
 /// Work that only the task owning the [`crate::mount::Supervisor`] can do.
@@ -68,6 +70,10 @@ pub struct App {
 pub enum Control {
     /// Remount one remote, or all of them.
     Remount { remote: Option<String> },
+    /// Mount one remote, or all of them, lifting any hold from `Unmount`.
+    Mount { remote: Option<String> },
+    /// Unmount one remote, or all of them, and keep them down until `Mount`.
+    Unmount { remote: Option<String> },
     /// Sync one pin, or every enabled pin.
     SyncPins { pin: Option<String> },
     /// The pin set changed: rebuild the inotify watches and drop scheduler
@@ -99,6 +105,57 @@ impl App {
             notifier,
             reload_tx,
             control_tx,
+            crawling: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Claim the single crawl slot; `false` when a crawl is already running.
+    pub fn begin_crawl(&self) -> bool {
+        !self
+            .crawling
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+    }
+
+    pub fn end_crawl(&self) {
+        self.crawling
+            .store(false, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Validate a mount request and hand it to the supervisor task.
+    fn mount_control(
+        &self,
+        remote: Option<String>,
+        verb: &str,
+        make: fn(Option<String>) -> Control,
+    ) -> Response {
+        // Validate here so a typo gets a useful answer rather than being
+        // silently dropped by the supervisor.
+        if let Some(name) = &remote
+            && self.config().remote(name).is_none()
+        {
+            return Response::err(
+                Code::Config,
+                "mount",
+                format!("no remote named {name:?} in the config"),
+            );
+        }
+        match self.control_tx.try_send(make(remote.clone())) {
+            Ok(()) => Response::Ok {
+                msg: match remote {
+                    Some(name) => format!("{verb} {name}"),
+                    None => format!("{verb} all remotes"),
+                },
+            },
+            Err(mpsc::error::TrySendError::Full(_)) => Response::err(
+                Code::Internal,
+                "mount",
+                "the daemon is busy with an earlier request; try again in a moment",
+            ),
+            Err(mpsc::error::TrySendError::Closed(_)) => Response::err(
+                Code::Internal,
+                "mount",
+                "the mount supervisor is not running",
+            ),
         }
     }
 
@@ -460,35 +517,13 @@ impl App {
                 }
             }
             Request::MountRemount { remote } => {
-                // Validate here so a typo gets a useful answer rather than being
-                // silently dropped by the supervisor.
-                if let Some(name) = &remote
-                    && self.config().remote(name).is_none()
-                {
-                    return Response::err(
-                        Code::Config,
-                        "mount",
-                        format!("no remote named {name:?} in the config"),
-                    );
-                }
-                match self.control_tx.try_send(Control::Remount {
-                    remote: remote.clone(),
-                }) {
-                    Ok(()) => Response::Ok {
-                        msg: match remote {
-                            Some(name) => format!("remounting {name}"),
-                            None => "remounting all remotes".into(),
-                        },
-                    },
-                    Err(mpsc::error::TrySendError::Full(_)) => Response::Ok {
-                        msg: "a remount is already pending".into(),
-                    },
-                    Err(mpsc::error::TrySendError::Closed(_)) => Response::err(
-                        Code::Internal,
-                        "mount",
-                        "the mount supervisor is not running",
-                    ),
-                }
+                self.mount_control(remote, "remounting", |remote| Control::Remount { remote })
+            }
+            Request::MountUp { remote } => {
+                self.mount_control(remote, "mounting", |remote| Control::Mount { remote })
+            }
+            Request::MountDown { remote } => {
+                self.mount_control(remote, "unmounting", |remote| Control::Unmount { remote })
             }
             Request::ConflictList => match self.conflict_list().await {
                 Ok(list) => Response::Conflicts { conflicts: list },

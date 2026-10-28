@@ -97,6 +97,15 @@ in {
       description = "OneDrive daemon";
       wantedBy = [ "default.target" ];
 
+      # Never give up restarting; a daemon that has stopped trying is
+      # useless, and the default start limiter would do exactly that. This is
+      # a [Unit] setting; under [Service] systemd ignores it.
+      unitConfig.StartLimitIntervalSec = 0;
+      # On a rebuild, restart the changed unit in one step. The default stops
+      # it and relies on a later start, which never comes for user units, so
+      # the daemon stayed dead after `nixos-rebuild switch`.
+      stopIfChanged = false;
+
       # Deliberately no `after = [ "network-online.target" ]`: that is a
       # system unit and ordering a user unit against it does nothing.
       # Network readiness is decided at runtime over D-Bus instead.
@@ -106,9 +115,6 @@ in {
         ExecStart = "${cfg.package}/bin/onedrive-rcd";
         Restart = "always";
         RestartSec = 2;
-        # Never give up restarting; a daemon that has stopped trying is
-        # useless, and the default start limiter would do exactly that.
-        StartLimitIntervalSec = 0;
         # A daemon wedged on a hung FUSE mount stops pinging and gets
         # restarted, instead of sitting "active" doing nothing forever.
         WatchdogSec = 60;
